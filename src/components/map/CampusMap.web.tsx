@@ -1,9 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { CATEGORY_META, URI_CENTER, type IconName } from '@/data/locations';
+import { CATEGORY_META, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
 import { colors } from '@/theme';
 import type { CampusMapProps } from './types';
 
@@ -14,16 +14,26 @@ function glyph(name: IconName, size: number, color: string) {
   return `<span style="font-family:material-community;font-size:${size}px;line-height:1;color:${color}">${String.fromCodePoint(code)}</span>`;
 }
 
+// react-leaflet compares props by reference and rebuilds a marker's DOM when
+// it gets a new icon object, so icons are created once and reused.
+const badgeIcons = new Map<string, L.DivIcon>();
+
 function badgeIcon(name: IconName, major: boolean) {
-  const d = major ? 38 : 30;
-  const bg = major ? colors.navy : colors.white;
-  const fg = major ? colors.white : colors.navy;
-  return L.divIcon({
-    className: '',
-    iconSize: [d, d],
-    iconAnchor: [d / 2, d / 2],
-    html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:${bg};border:2px solid ${colors.navy};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(4,30,66,.25)">${glyph(name, major ? 20 : 16, fg)}</div>`,
-  });
+  const key = `${name}:${major}`;
+  let icon = badgeIcons.get(key);
+  if (!icon) {
+    const d = major ? 38 : 30;
+    const bg = major ? colors.navy : colors.white;
+    const fg = major ? colors.white : colors.navy;
+    icon = L.divIcon({
+      className: '',
+      iconSize: [d, d],
+      iconAnchor: [d / 2, d / 2],
+      html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:${bg};border:2px solid ${colors.navy};display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(4,30,66,.25)">${glyph(name, major ? 20 : 16, fg)}</div>`,
+    });
+    badgeIcons.set(key, icon);
+  }
+  return icon;
 }
 
 function pinIcon(color: string) {
@@ -36,6 +46,30 @@ function pinIcon(color: string) {
 }
 
 const TOOLTIP_OFFSET: Record<string, L.PointTuple> = { top: [0, -14], bottom: [0, 14], left: [-14, 0], right: [14, 0] };
+
+const PlaceMarker = memo(function PlaceMarker({
+  place,
+  onPress,
+}: {
+  place: CampusLocation;
+  onPress?: (place: CampusLocation) => void;
+}) {
+  const position = useMemo<L.LatLngTuple>(() => [place.lat, place.lng], [place.lat, place.lng]);
+  const handlers = useMemo(() => ({ click: () => onPress?.(place) }), [onPress, place]);
+  const side = place.labelSide ?? 'top';
+  return (
+    <Marker
+      position={position}
+      icon={badgeIcon(CATEGORY_META[place.category].icon, !!place.major)}
+      eventHandlers={handlers}
+      zIndexOffset={place.major ? 100 : 0}
+    >
+      <Tooltip direction={side} offset={TOOLTIP_OFFSET[side]} permanent={!!place.major}>
+        {place.name}
+      </Tooltip>
+    </Marker>
+  );
+});
 
 function FitBounds({ from, to }: Pick<CampusMapProps, 'from' | 'to'>) {
   const map = useMap();
@@ -53,9 +87,14 @@ function FitBounds({ from, to }: Pick<CampusMapProps, 'from' | 'to'>) {
   return null;
 }
 
-export function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
-  const fromPin = useMemo(() => pinIcon(colors.keaney), []);
-  const toPin = useMemo(() => pinIcon(colors.danger), []);
+const FROM_PIN = pinIcon(colors.keaney);
+const TO_PIN = pinIcon(colors.danger);
+const ROUTE_STYLE: L.PathOptions = { color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round' };
+
+export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
+  const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
+  const toPos = useMemo<L.LatLngTuple | undefined>(() => to && [to.lat, to.lng], [to?.lat, to?.lng]);
+  const route = useMemo(() => (fromPos && toPos ? [fromPos, toPos] : undefined), [fromPos, toPos]);
 
   return (
     <MapContainer
@@ -73,27 +112,12 @@ export function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
       <FitBounds from={from} to={to} />
 
       {places.map((p) => (
-        <Marker
-          key={p.id}
-          position={[p.lat, p.lng]}
-          icon={badgeIcon(CATEGORY_META[p.category].icon, !!p.major)}
-          eventHandlers={{ click: () => onPlacePress?.(p) }}
-          zIndexOffset={p.major ? 100 : 0}
-        >
-          <Tooltip direction={p.labelSide ?? 'top'} offset={TOOLTIP_OFFSET[p.labelSide ?? 'top']} permanent={!!p.major}>
-            {p.name}
-          </Tooltip>
-        </Marker>
+        <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
       ))}
 
-      {from && to && (
-        <Polyline
-          positions={[[from.lat, from.lng], [to.lat, to.lng]]}
-          pathOptions={{ color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round' }}
-        />
-      )}
-      {from && <Marker position={[from.lat, from.lng]} icon={fromPin} zIndexOffset={1000} />}
-      {to && <Marker position={[to.lat, to.lng]} icon={toPin} zIndexOffset={1000} />}
+      {route && <Polyline positions={route} pathOptions={ROUTE_STYLE} />}
+      {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
+      {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}
     </MapContainer>
   );
-}
+});

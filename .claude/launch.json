@@ -4,8 +4,20 @@
     {
       "name": "web",
       "runtimeExecutable": "/bin/zsh",
-      "runtimeArgs": ["-c", "export PATH=$HOME/.local/node/bin:$PATH && npx expo start --web --port 8081"],
+      "runtimeArgs": [
+        "-c",
+        "export PATH=$HOME/.local/node/bin:$PATH && npx expo start --web --port 8081"
+      ],
       "port": 8081
+    },
+    {
+      "name": "web-fast",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": [
+        "-c",
+        "export PATH=$HOME/.local/node/bin:$PATH && npm run preview:web"
+      ],
+      "port": 8082
     }
   ]
 }

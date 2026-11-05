@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,7 +6,7 @@ import { Header } from '@/components/Header';
 import { LocationField } from '@/components/LocationField';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
-import { CATEGORY_META, LOCATIONS } from '@/data/locations';
+import { CATEGORY_META, LOCATIONS, type CampusLocation } from '@/data/locations';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import { arrivalTime, formatMiles, haversineMeters, travelMinutes, TRAVEL_MODES, type TravelMode } from '@/lib/geo';
 import { findNearest } from '@/lib/search';
@@ -42,6 +42,11 @@ export default function MapScreen() {
     setToState(e);
     router.setParams({ to: e ? encodeEndpoint(e) : undefined });
   };
+  // Stable so the memoized map doesn't re-render when only the panel changes.
+  const onPlacePress = useCallback((p: CampusLocation) => {
+    setToState(fromLocation(p));
+    router.setParams({ to: p.id });
+  }, []);
 
   const meters = from && to ? haversineMeters(from, to) : undefined;
   const minutes = meters !== undefined ? travelMinutes(meters, mode) : undefined;
@@ -168,7 +173,7 @@ export default function MapScreen() {
         {mobile ? (
           <>
             <View style={styles.mapMobile}>
-              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={(p) => setTo(fromLocation(p))} />
+              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={onPlacePress} />
             </View>
             {panel}
           </>
@@ -176,7 +181,7 @@ export default function MapScreen() {
           <>
             {panel}
             <View style={styles.map}>
-              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={(p) => setTo(fromLocation(p))} />
+              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={onPlacePress} />
             </View>
           </>
         )}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { colors } from '@/theme';
 import type { CampusMapProps } from './types';
 
 // Native (iOS/Android) map. The web build uses CampusMap.web.tsx instead.
-export function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
+export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
   const ref = useRef<MapView>(null);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
       {to && <Marker coordinate={{ latitude: to.lat, longitude: to.lng }} pinColor={colors.danger} />}
     </MapView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   badge: {
