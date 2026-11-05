@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -89,19 +89,90 @@ function FitBounds({ points }: { points: L.LatLngTuple[] }) {
   return null;
 }
 
+const FOLLOW_ZOOM = 18;
+const NO_POINTS: L.LatLngTuple[] = [];
+
+/**
+ * Keeps the camera on the user during navigation. The first fix snaps the view
+ * in close; after that each fix pans smoothly, keeping whatever zoom the user
+ * picked. Dragging the map hands control back to the user.
+ */
+function FollowUser({ position, onUserPan }: { position?: LatLng; onUserPan?: () => void }) {
+  const map = useMap();
+  const active = !!position;
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (!position) {
+      started.current = false;
+      return;
+    }
+    const target: L.LatLngTuple = [position.lat, position.lng];
+    if (!started.current) {
+      started.current = true;
+      map.setView(target, Math.max(map.getZoom(), FOLLOW_ZOOM), { animate: true });
+    } else {
+      // Short linear pan: lands before the next fix (~1 s), so motion looks continuous.
+      map.panTo(target, { animate: true, duration: 0.6, easeLinearity: 1, noMoveStart: true });
+    }
+  }, [map, position]);
+
+  useEffect(() => {
+    if (!active || !onUserPan) return;
+    // 'dragstart' only fires for the user's own drags, not for panTo.
+    map.on('dragstart', onUserPan);
+    return () => {
+      map.off('dragstart', onUserPan);
+    };
+  }, [map, active, onUserPan]);
+  return null;
+}
+
+/** The blue "you are here" dot, with an arrow showing the direction of travel. */
+function UserMarker({ position, heading }: { position: LatLng; heading?: number }) {
+  const ref = useRef<L.Marker>(null);
+  const pos = useMemo<L.LatLngTuple>(() => [position.lat, position.lng], [position.lat, position.lng]);
+  // Rotate the arrow in place instead of building a new icon on every fix.
+  useEffect(() => {
+    const arrow = ref.current?.getElement()?.querySelector<HTMLElement>('.rf-heading');
+    if (!arrow) return;
+    arrow.style.display = heading === undefined ? 'none' : 'block';
+    if (heading !== undefined) arrow.style.transform = `rotate(${heading}deg)`;
+  }, [heading, pos]);
+  return <Marker ref={ref} position={pos} icon={USER_ICON} zIndexOffset={2000} interactive={false} />;
+}
+
 const FROM_PIN = pinIcon(colors.keaney);
 const TO_PIN = pinIcon(colors.danger);
 const USER_ICON = L.divIcon({
   className: '',
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
-  html: `<div style="width:20px;height:20px;border-radius:50%;background:#1F5FD1;border:3px solid #fff;box-shadow:0 0 0 6px rgba(31,95,209,.2)"></div>`,
+  iconSize: [44, 44],
+  iconAnchor: [22, 22],
+  html:
+    `<div style="position:relative;width:44px;height:44px">` +
+    // Heading cone, rotated around the dot's center.
+    `<div class="rf-heading" style="display:none;position:absolute;inset:0;transition:transform .3s linear">` +
+    `<div style="position:absolute;left:14px;top:0;width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid #1F5FD1"></div></div>` +
+    `<div style="position:absolute;left:12px;top:12px;width:20px;height:20px;border-radius:50%;background:#1F5FD1;border:3px solid #fff;box-sizing:border-box;box-shadow:0 0 0 6px rgba(31,95,209,.2)"></div>` +
+    `</div>`,
 });
 const ROUTE_STYLE: L.PathOptions = { color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round', lineJoin: 'round' };
 const ROUTE_DIM_STYLE: L.PathOptions = { ...ROUTE_STYLE, opacity: 0.35 };
 const HIGHLIGHT_STYLE: L.PathOptions = { color: colors.navy, weight: 8, opacity: 1, lineCap: 'round', lineJoin: 'round' };
 
-export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress, route, highlight, user, fitTo }: CampusMapProps) {
+export const CampusMap = memo(function CampusMap({
+  places,
+  from,
+  to,
+  onPlacePress,
+  route,
+  highlight,
+  user,
+  heading,
+  fitTo,
+  followUser,
+  onUserPan,
+}: CampusMapProps) {
   const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
   const toPos = useMemo<L.LatLngTuple | undefined>(() => to && [to.lat, to.lng], [to?.lat, to?.lng]);
   const path = useMemo(
@@ -127,7 +198,8 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
         maxZoom={19}
       />
       <ZoomControl position="bottomright" />
-      <FitBounds points={frame} />
+      <FitBounds points={followUser ? NO_POINTS : frame} />
+      <FollowUser position={followUser} onUserPan={onUserPan} />
 
       {places.map((p) => (
         <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
@@ -137,7 +209,7 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
       {highlightPath && <Polyline positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} />}
       {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
       {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}
-      {user && <Marker position={toTuple(user)} icon={USER_ICON} zIndexOffset={2000} interactive={false} />}
+      {user && <UserMarker position={user} heading={heading} />}
     </MapContainer>
   );
 });

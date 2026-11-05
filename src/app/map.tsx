@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -9,15 +9,27 @@ import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
 import { CATEGORY_META, LOCATIONS, type CampusLocation } from '@/data/locations';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
-import { arrivalTime, distanceToPathMeters, formatMiles, TRAVEL_MODES, type LatLng, type TravelMode } from '@/lib/geo';
+import {
+  arrivalTime,
+  cumulativeMeters,
+  distanceToPathMeters,
+  formatMiles,
+  haversineMeters,
+  TRAVEL_MODES,
+  type LatLng,
+  type TravelMode,
+} from '@/lib/geo';
 import { buildSteps } from '@/lib/routing/directions';
 import { findRoute, type Route } from '@/lib/routing/router';
 import { findNearest } from '@/lib/search';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
-import { useWatchPosition } from '@/lib/useWatchPosition';
+import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
-const OFF_ROUTE_METERS = 40;
+const OFF_ROUTE_METERS = 30;
+const ARRIVED_METERS = 15;
+const REROUTE_AFTER_FIXES = 2;
+const REROUTE_COOLDOWN_MS = 3000;
 // Farther than this from the route, the user is clearly not on campus yet.
 const FAR_AWAY_METERS = 1500;
 
@@ -56,44 +68,126 @@ export default function MapScreen() {
     return r;
   }, [from, to]);
   const route = routes?.[mode] ?? null;
-  const steps = useMemo(() => (route && from && to ? buildSteps(route, from.name, to.name) : []), [route, from, to]);
   const nearby = useMemo(() => (to ? findNearest(to, { k: 3, excludeId: to.id }) : []), [to]);
 
-  // Turn-by-turn navigation.
-  const [navigating, setNavigating] = useState(false);
-  const [rawStepIndex, setStepIndex] = useState(0);
-  // The reset below runs after render, so keep the index valid when a shorter route arrives.
-  const stepIndex = Math.min(rawStepIndex, Math.max(steps.length - 1, 0));
+  // Turn-by-turn navigation. Navigation belongs to the route it was started
+  // on, so it ends by itself if that route goes away.
+  const [navRoute, setNavRoute] = useState<Route | null>(null);
+  const navigating = !!route && navRoute === route;
   const [following, setFollowing] = useState(false);
-  const { position: user, error: watchError } = useWatchPosition(navigating && following);
+  // True after the user drags the map; the camera stops chasing them until "Recenter".
+  const [cameraFree, setCameraFree] = useState(false);
+  const { fix, error: watchError } = useWatchPosition(navigating && following);
+  const user = fix?.position;
 
-  useEffect(() => setStepIndex(0), [route]);
-  useEffect(() => {
-    if (!route) setNavigating(false);
-  }, [route]);
+  // A route recomputed from the user's live position after they left the
+  // planned one. Tagged with the planned route it replaces, so picking a new
+  // route drops it.
+  const [rerouted, setRerouted] = useState<{ base: Route; route: Route } | null>(null);
+  const liveRoute = navigating && rerouted && rerouted.base === route ? rerouted.route : null;
+  const activeRoute = liveRoute ?? route;
+  const steps = useMemo(
+    () => (activeRoute && from && to ? buildSteps(activeRoute, liveRoute ? 'your location' : from.name, to.name) : []),
+    [activeRoute, liveRoute, from, to],
+  );
+  const cum = useMemo(() => (activeRoute ? cumulativeMeters(activeRoute.coords) : undefined), [activeRoute]);
 
-  const userDistance = useMemo(() => (user && route ? distanceToPathMeters(user, route.coords) : undefined), [user, route]);
-  const offRoute = userDistance !== undefined && userDistance.meters > OFF_ROUTE_METERS && userDistance.meters < FAR_AWAY_METERS;
-  const farAway = userDistance !== undefined && userDistance.meters >= FAR_AWAY_METERS;
+  // The selected step, tagged with its route: a new route starts at step 0.
+  const [stepSel, setStepSel] = useState<{ route: Route | null; index: number }>({ route: null, index: 0 });
+  const rawStepIndex = stepSel.route === activeRoute ? stepSel.index : 0;
+  const stepIndex = Math.min(rawStepIndex, Math.max(steps.length - 1, 0));
+  const setStepIndex = useCallback((index: number) => setStepSel({ route: activeRoute, index }), [activeRoute]);
 
-  // While following, move to the step the user is currently on.
-  useEffect(() => {
-    if (!userDistance || userDistance.meters > OFF_ROUTE_METERS) return;
-    const i = steps.findIndex((s) => userDistance.segment >= s.startIndex && userDistance.segment < s.endIndex);
-    if (i >= 0) setStepIndex((cur) => Math.max(cur, i));
-  }, [userDistance, steps]);
+  // Where the user is relative to the route: O(route length) per GPS fix.
+  const track = useMemo(
+    () => (user && activeRoute ? distanceToPathMeters(user, activeRoute.coords) : undefined),
+    [user, activeRoute],
+  );
+  // Don't call a fix "off route" just because the GPS itself is fuzzy.
+  const offRouteLimit = Math.max(OFF_ROUTE_METERS, Math.min(fix?.accuracy ?? 0, 60));
+  const farAway = !!track && track.meters >= FAR_AWAY_METERS;
+  const onRoute = !!track && track.meters <= offRouteLimit;
+  const offRoute = !!track && !onRoute && !farAway;
+
+  // Meters left along the route from the user's spot on it (to the end, and to the end of a step).
+  const metersFromUserTo = useCallback(
+    (index: number) => {
+      if (!track || !cum || !activeRoute) return undefined;
+      const next = track.segment + 1;
+      if (index < next) return 0;
+      return cum[index] - cum[next] + haversineMeters(track.point, activeRoute.coords[next]);
+    },
+    [track, cum, activeRoute],
+  );
+  const lastIndex = activeRoute ? activeRoute.coords.length - 1 : 0;
+  const remainingMeters = navigating && onRoute ? metersFromUserTo(lastIndex) : undefined;
+
+  // React to each new GPS fix during render (no extra commit per fix):
+  //  - on the route: move to the step the user is on, or "Arrive" at the end;
+  //  - off it (a wrong turn, a shortcut, walking the other way): reroute from
+  //    where they are. Two off-route fixes in a row avoid rerouting on one GPS jump.
+  const [handledFix, setHandledFix] = useState<LiveFix | undefined>(undefined);
+  const [offFixes, setOffFixes] = useState(0);
+  const [lastRerouteAt, setLastRerouteAt] = useState(0);
+  if (fix !== handledFix) {
+    setHandledFix(fix);
+    if (navigating && fix && track && activeRoute && to) {
+      if (onRoute) {
+        if (offFixes) setOffFixes(0);
+        const i =
+          remainingMeters !== undefined && remainingMeters < ARRIVED_METERS
+            ? steps.length - 1
+            : steps.findIndex((st) => track.segment >= st.startIndex && track.segment < st.endIndex);
+        if (i > stepIndex) setStepSel({ route: activeRoute, index: i });
+      } else if (offRoute) {
+        const n = offFixes + 1;
+        const r = n >= REROUTE_AFTER_FIXES && fix.time - lastRerouteAt >= REROUTE_COOLDOWN_MS ? findRoute(fix.position, to, mode) : null;
+        if (r && route) {
+          setRerouted({ base: route, route: r }); // only the current mode: a few ms
+          setLastRerouteAt(fix.time);
+          setOffFixes(0);
+        } else {
+          setOffFixes(n);
+        }
+      }
+    }
+  }
+
+  const rerouteNow = () => {
+    if (!user || !to || !route) return;
+    const r = findRoute(user, to, mode);
+    if (r) {
+      setRerouted({ base: route, route: r });
+      setLastRerouteAt(fix?.time ?? Date.now());
+    }
+  };
+
+  const live = navigating && following && onRoute && !!track;
+  // While tracking, draw only the part of the route still ahead of the user.
+  const routeShown = useMemo(() => {
+    if (!activeRoute) return undefined;
+    if (!live || !track) return activeRoute.coords;
+    return [track.point, ...activeRoute.coords.slice(track.segment + 1)];
+  }, [activeRoute, live, track]);
 
   const step = navigating ? steps[stepIndex] : undefined;
-  const highlight = useMemo(
-    () => (step && route && step.endIndex > step.startIndex ? route.coords.slice(step.startIndex, step.endIndex + 1) : undefined),
-    [step, route],
-  );
+  const highlight = useMemo(() => {
+    if (!step || !activeRoute || step.endIndex <= step.startIndex) return undefined;
+    // If the user is partway through this step, start the highlight at them.
+    if (live && track && track.segment >= step.startIndex && track.segment < step.endIndex) {
+      return [track.point, ...activeRoute.coords.slice(track.segment + 1, step.endIndex + 1)];
+    }
+    return activeRoute.coords.slice(step.startIndex, step.endIndex + 1);
+  }, [step, activeRoute, live, track]);
+  const stepMetersLeft = live && step ? metersFromUserTo(step.endIndex) : undefined;
+
+  const followUser = navigating && following && !cameraFree && user && !farAway ? user : undefined;
   const fitTo = useMemo<LatLng[] | undefined>(() => {
-    if (!route) return undefined;
-    if (!step) return route.coords;
-    const pts = highlight ?? [route.coords[route.coords.length - 1]];
-    return following && user && !farAway ? [user, ...pts] : pts;
-  }, [route, step, highlight, following, user, farAway]);
+    if (!activeRoute) return undefined;
+    if (!step) return activeRoute.coords;
+    return highlight ?? [activeRoute.coords[activeRoute.coords.length - 1]];
+  }, [activeRoute, step, highlight]);
+  const onUserPan = useCallback(() => setCameraFree(true), []);
 
   const useMyLocation = async () => {
     const coords = await locate();
@@ -101,9 +195,16 @@ export default function MapScreen() {
   };
 
   const startRoute = () => {
-    setStepIndex(0);
-    setFollowing(!from?.id); // starting from "My location": follow by default
-    setNavigating(true);
+    setStepSel({ route, index: 0 });
+    setFollowing(true);
+    setCameraFree(false);
+    setRerouted(null);
+    setNavRoute(route);
+  };
+  const endRoute = () => {
+    setNavRoute(null);
+    setFollowing(false);
+    setRerouted(null);
   };
 
   const notice = watchError ?? (farAway ? "You're not near campus yet, so live tracking will start once you're close." : undefined);
@@ -221,22 +322,24 @@ export default function MapScreen() {
       contentContainerStyle={styles.panelContent}
       keyboardShouldPersistTaps="handled"
     >
-      {navigating && route && to && steps.length ? (
+      {navigating && activeRoute && to && steps.length ? (
         <NavigationPanel
           destination={to.name}
           mode={mode}
-          route={route}
+          route={activeRoute}
           steps={steps}
           stepIndex={stepIndex}
           onStepChange={setStepIndex}
-          onEnd={() => {
-            setNavigating(false);
-            setFollowing(false);
-          }}
+          onEnd={endRoute}
           following={following}
-          onToggleFollow={() => setFollowing((f) => !f)}
+          onToggleFollow={() => {
+            setFollowing((f) => !f);
+            setCameraFree(false);
+          }}
           offRoute={offRoute}
-          onReroute={() => user && setFrom(currentPosition(user))}
+          onReroute={rerouteNow}
+          remainingMeters={remainingMeters}
+          stepMetersLeft={stepMetersLeft}
           notice={notice}
         />
       ) : (
@@ -251,11 +354,21 @@ export default function MapScreen() {
       from={from}
       to={to}
       onPlacePress={onPlacePress}
-      route={route?.coords}
+      route={routeShown}
       highlight={highlight}
       user={farAway ? undefined : user}
+      heading={fix?.heading}
       fitTo={fitTo}
+      followUser={followUser}
+      onUserPan={onUserPan}
     />
+  );
+  // After the user drags the map mid-navigation, offer a way back to following.
+  const recenter = navigating && following && cameraFree && user && !farAway && (
+    <Pressable style={styles.recenter} onPress={() => setCameraFree(false)} accessibilityRole="button">
+      <MaterialCommunityIcons name="crosshairs-gps" size={18} color={colors.white} />
+      <Text style={styles.recenterText}>Recenter</Text>
+    </Pressable>
   );
 
   return (
@@ -264,13 +377,19 @@ export default function MapScreen() {
       <View style={[styles.body, mobile && styles.bodyMobile]}>
         {mobile ? (
           <>
-            <View style={styles.mapMobile}>{map}</View>
+            <View style={styles.mapMobile}>
+              {map}
+              {recenter}
+            </View>
             {panel}
           </>
         ) : (
           <>
             {panel}
-            <View style={styles.map}>{map}</View>
+            <View style={styles.map}>
+              {map}
+              {recenter}
+            </View>
           </>
         )}
       </View>
@@ -300,6 +419,21 @@ const styles = StyleSheet.create({
   panelContent: { padding: 20, gap: 14 },
 
   map: { flex: 1 },
+  recenter: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    zIndex: 1000,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.navy,
+    ...shadow.card,
+  },
+  recenterText: { color: colors.white, fontWeight: '700', fontSize: 14 },
   mapMobile: { height: 340 },
 
   back: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },

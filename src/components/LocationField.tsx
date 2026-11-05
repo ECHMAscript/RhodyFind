@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, type CampusLocation } from '@/data/locations';
@@ -31,7 +31,12 @@ export function LocationField({
   const [query, setQuery] = useState(value);
   const [focused, setFocused] = useState(false);
 
-  useEffect(() => setQuery(value), [value]);
+  // When the selected value changes from outside, show it (adjusting state during render).
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    setQuery(value);
+  }
 
   const suggestions = useMemo(() => (query === value ? [] : searchByName(query)), [query, value]);
   const showCurrent = !!onUseCurrentLocation && focused && query === value;

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { TRAVEL_MODES, arrivalTime, formatMiles, type TravelMode } from '@/lib/geo';
@@ -17,6 +18,10 @@ type Props = {
   onToggleFollow: () => void;
   offRoute: boolean;
   onReroute: () => void;
+  /** Live meters left to the destination, from the user's position. */
+  remainingMeters?: number;
+  /** Live meters left in the current step. */
+  stepMetersLeft?: number;
   notice?: string;
 };
 
@@ -33,11 +38,14 @@ export function NavigationPanel({
   onToggleFollow,
   offRoute,
   onReroute,
+  remainingMeters,
+  stepMetersLeft,
   notice,
 }: Props) {
   const step = steps[stepIndex];
   const modeMeta = TRAVEL_MODES.find((m) => m.id === mode)!;
-  const remaining = steps.slice(stepIndex).reduce((sum, s) => sum + s.meters, 0);
+  const remaining = remainingMeters ?? steps.slice(stepIndex).reduce((sum, s) => sum + s.meters, 0);
+  const stepLeft = stepMetersLeft ?? step.meters;
   const remainingMin = Math.max(1, Math.round((route.minutes * remaining) / Math.max(route.meters, 1)));
 
   return (
@@ -65,7 +73,11 @@ export function NavigationPanel({
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.currentText}>{step.instruction}</Text>
-          {step.meters > 0 && <Text style={styles.currentMeta}>for {formatMiles(step.meters)}</Text>}
+          {stepLeft > 0 && (
+            <Text style={styles.currentMeta}>
+              {stepMetersLeft !== undefined ? `${formatMiles(stepLeft)} to go` : `for ${formatMiles(stepLeft)}`}
+            </Text>
+          )}
         </View>
       </View>
 
@@ -98,37 +110,51 @@ export function NavigationPanel({
       {offRoute && (
         <Pressable style={styles.offRoute} onPress={onReroute}>
           <MaterialCommunityIcons name="map-marker-alert-outline" size={18} color={colors.danger} />
-          <Text style={styles.offRouteText}>You're off the route.</Text>
-          <Text style={styles.offRouteLink}>Reroute from here</Text>
+          <Text style={styles.offRouteText}>Off route, finding a new way…</Text>
+          <Text style={styles.offRouteLink}>Reroute now</Text>
         </Pressable>
       )}
       {notice && <Text style={styles.notice}>{notice}</Text>}
 
-      {/* All steps */}
-      <View style={styles.list}>
-        {steps.map((s, i) => {
-          const active = i === stepIndex;
-          const past = i < stepIndex;
-          return (
-            <Pressable
-              key={i}
-              onPress={() => onStepChange(i)}
-              style={({ hovered }: any) => [styles.row, active && styles.rowActive, hovered && !active && styles.rowHover]}
-            >
-              <MaterialCommunityIcons
-                name={MANEUVER_ICON[s.maneuver]}
-                size={18}
-                color={active ? colors.navy : past ? colors.gray : colors.text}
-              />
-              <Text style={[styles.rowText, past && styles.rowPast, active && styles.rowTextActive]}>{s.instruction}</Text>
-              {s.meters > 0 && <Text style={[styles.rowDist, past && styles.rowPast]}>{formatMiles(s.meters)}</Text>}
-            </Pressable>
-          );
-        })}
-      </View>
+      <StepList steps={steps} stepIndex={stepIndex} onStepChange={onStepChange} />
     </View>
   );
 }
+
+// The full list only changes when the step does, so GPS fixes skip re-rendering it.
+const StepList = memo(function StepList({
+  steps,
+  stepIndex,
+  onStepChange,
+}: {
+  steps: Step[];
+  stepIndex: number;
+  onStepChange: (index: number) => void;
+}) {
+  return (
+    <View style={styles.list}>
+      {steps.map((s, i) => {
+        const active = i === stepIndex;
+        const past = i < stepIndex;
+        return (
+          <Pressable
+            key={i}
+            onPress={() => onStepChange(i)}
+            style={({ hovered }: any) => [styles.row, active && styles.rowActive, hovered && !active && styles.rowHover]}
+          >
+            <MaterialCommunityIcons
+              name={MANEUVER_ICON[s.maneuver]}
+              size={18}
+              color={active ? colors.navy : past ? colors.gray : colors.text}
+            />
+            <Text style={[styles.rowText, past && styles.rowPast, active && styles.rowTextActive]}>{s.instruction}</Text>
+            {s.meters > 0 && <Text style={[styles.rowDist, past && styles.rowPast]}>{formatMiles(s.meters)}</Text>}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   wrap: { gap: 14 },

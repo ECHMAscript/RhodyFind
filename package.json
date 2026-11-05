@@ -26,6 +26,8 @@
   "devDependencies": {
     "@types/leaflet": "^1.9.22",
     "@types/react": "~19.3.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~58.0.4",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -36,7 +38,8 @@
     "typecheck": "tsc --noEmit",
     "build:web": "expo export -p web",
     "preview:web": "expo export -p web && expo serve --port 8082",
-    "build:graph": "node scripts/build-campus-graph.mjs"
+    "build:graph": "node scripts/build-campus-graph.mjs",
+    "lint": "expo lint"
   },
   "private": true
 }

@@ -47,14 +47,14 @@ export function arrivalTime(minutes: number, from = new Date()): string {
 }
 
 /**
- * Distance from p to the nearest point of a path, and the index of the path
- * segment (path[i] -> path[i + 1]) that point is on.
+ * Closest point of a path to p: its distance, the index of the path segment
+ * (path[i] -> path[i + 1]) it lies on, and the point itself.
  */
-export function distanceToPathMeters(p: LatLng, path: LatLng[]): { meters: number; segment: number } {
+export function distanceToPathMeters(p: LatLng, path: LatLng[]): { meters: number; segment: number; point: LatLng } {
   // Flat-earth projection around p; accurate to well under a meter at campus scale.
   const kx = 111_320 * Math.cos(toRad(p.lat));
   const ky = 110_540;
-  let best = { meters: Infinity, segment: 0 };
+  let best = { meters: Infinity, segment: 0, point: path[0] ?? p };
   for (let i = 0; i < path.length - 1; i++) {
     const ax = (path[i].lng - p.lng) * kx;
     const ay = (path[i].lat - p.lat) * ky;
@@ -65,7 +65,27 @@ export function distanceToPathMeters(p: LatLng, path: LatLng[]): { meters: numbe
     const len2 = dx * dx + dy * dy;
     const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
     const d = Math.hypot(ax + t * dx, ay + t * dy);
-    if (d < best.meters) best = { meters: d, segment: i };
+    if (d < best.meters) {
+      best = {
+        meters: d,
+        segment: i,
+        point: { lat: path[i].lat + t * (path[i + 1].lat - path[i].lat), lng: path[i].lng + t * (path[i + 1].lng - path[i].lng) },
+      };
+    }
   }
   return best;
+}
+
+/** cum[i] = meters along the path from path[0] to path[i]. */
+export function cumulativeMeters(path: LatLng[]): Float64Array {
+  const cum = new Float64Array(path.length);
+  for (let i = 1; i < path.length; i++) cum[i] = cum[i - 1] + haversineMeters(path[i - 1], path[i]);
+  return cum;
+}
+
+/** Compass bearing from a to b in degrees, 0 = north. */
+export function bearingDeg(a: LatLng, b: LatLng): number {
+  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+  const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
 }

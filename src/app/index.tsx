@@ -148,7 +148,7 @@ export default function Home() {
                   <MaterialCommunityIcons name="crosshairs-gps" size={28} color={colors.navy} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.routeTitle}>See what's closest to you</Text>
+                  <Text style={styles.routeTitle}>See what&apos;s closest to you</Text>
                   <Text style={styles.routeMeta}>Set a starting point above, or use your current location.</Text>
                 </View>
                 <Pressable style={styles.locateBtn} onPress={useMyLocation}>

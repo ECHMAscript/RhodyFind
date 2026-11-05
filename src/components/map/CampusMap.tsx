@@ -10,15 +10,41 @@ import type { CampusMapProps } from './types';
 const toCoord = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
 
 // Native (iOS/Android) map. The web build uses CampusMap.web.tsx instead.
-export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress, route, highlight, user, fitTo }: CampusMapProps) {
+const FOLLOW_ZOOM = 18;
+
+export const CampusMap = memo(function CampusMap({
+  places,
+  from,
+  to,
+  onPlacePress,
+  route,
+  highlight,
+  user,
+  heading,
+  fitTo,
+  followUser,
+  onUserPan,
+}: CampusMapProps) {
   const ref = useRef<MapView>(null);
+  const following = useRef(false);
+
+  // Live navigation: keep the camera on the user, zooming in on the first fix only.
+  useEffect(() => {
+    if (!followUser) {
+      following.current = false;
+      return;
+    }
+    const center = toCoord(followUser);
+    ref.current?.animateCamera(following.current ? { center } : { center, zoom: FOLLOW_ZOOM }, { duration: 600 });
+    following.current = true;
+  }, [followUser]);
 
   const frame = useMemo(
     () => (fitTo ?? ([from, to].filter(Boolean) as LatLng[])).map(toCoord),
     [fitTo, from?.lat, from?.lng, to?.lat, to?.lng],
   );
   useEffect(() => {
-    if (frame.length) {
+    if (frame.length && !following.current) {
       ref.current?.fitToCoordinates(frame, { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true });
     }
   }, [frame]);
@@ -36,6 +62,7 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
       initialRegion={{ latitude: URI_CENTER.lat, longitude: URI_CENTER.lng, latitudeDelta: 0.012, longitudeDelta: 0.012 }}
       showsUserLocation={!user}
       showsPointsOfInterests={false}
+      onPanDrag={followUser ? onUserPan : undefined}
     >
       {places.map((p) => (
         <Marker
@@ -61,8 +88,20 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
       {from && <Marker coordinate={toCoord(from)} pinColor={colors.keaney} />}
       {to && <Marker coordinate={toCoord(to)} pinColor={colors.danger} />}
       {user && (
-        <Marker coordinate={toCoord(user)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
-          <View style={styles.user} />
+        <Marker
+          // tracksViewChanges is off, so swap the marker when the dot becomes an arrow.
+          key={heading === undefined ? 'user-dot' : 'user-arrow'}
+          coordinate={toCoord(user)}
+          anchor={{ x: 0.5, y: 0.5 }}
+          flat
+          rotation={heading ?? 0}
+          tracksViewChanges={false}
+        >
+          {heading === undefined ? (
+            <View style={styles.user} />
+          ) : (
+            <MaterialCommunityIcons name="navigation" size={30} color="#1F5FD1" />
+          )}
         </Marker>
       )}
     </MapView>

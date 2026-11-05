@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Link, usePathname } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +18,8 @@ const NAV = [
   { href: '/map', label: 'Map' },
 ] as const;
 
-export function Header() {
+// Memoized: the map screen re-renders on every GPS fix, the header never needs to.
+export const Header = memo(function Header() {
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const compact = width < breakpoints.tablet;
@@ -46,7 +48,7 @@ export function Header() {
       </View>
     </SafeAreaView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   safe: { backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border, zIndex: 10 },
