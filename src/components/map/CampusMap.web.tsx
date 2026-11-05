@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
 import { colors } from '@/theme';
+import type { LatLng } from '@/lib/geo';
 import type { CampusMapProps } from './types';
 
 // Leaflet markers are plain HTML, so the icons are drawn with the same
@@ -71,13 +72,14 @@ const PlaceMarker = memo(function PlaceMarker({
   );
 });
 
-function FitBounds({ from, to }: Pick<CampusMapProps, 'from' | 'to'>) {
+const toTuple = (p: LatLng): L.LatLngTuple => [p.lat, p.lng];
+
+function FitBounds({ points }: { points: L.LatLngTuple[] }) {
   const map = useMap();
   useEffect(() => {
-    const pts = [from, to].filter(Boolean).map((p) => [p!.lat, p!.lng] as [number, number]);
-    if (pts.length === 2) map.fitBounds(pts, { padding: [70, 70], maxZoom: 18 });
-    else if (pts.length === 1) map.setView(pts[0], 17);
-  }, [map, from?.lat, from?.lng, to?.lat, to?.lng]);
+    if (points.length > 1) map.fitBounds(points, { padding: [60, 60], maxZoom: 18, animate: true });
+    else if (points.length === 1) map.setView(points[0], 17, { animate: true });
+  }, [map, points]);
   // The map's container can resize (e.g. switching to the mobile layout).
   useEffect(() => {
     const ro = new ResizeObserver(() => map.invalidateSize());
@@ -89,12 +91,28 @@ function FitBounds({ from, to }: Pick<CampusMapProps, 'from' | 'to'>) {
 
 const FROM_PIN = pinIcon(colors.keaney);
 const TO_PIN = pinIcon(colors.danger);
-const ROUTE_STYLE: L.PathOptions = { color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round' };
+const USER_ICON = L.divIcon({
+  className: '',
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+  html: `<div style="width:20px;height:20px;border-radius:50%;background:#1F5FD1;border:3px solid #fff;box-shadow:0 0 0 6px rgba(31,95,209,.2)"></div>`,
+});
+const ROUTE_STYLE: L.PathOptions = { color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round', lineJoin: 'round' };
+const ROUTE_DIM_STYLE: L.PathOptions = { ...ROUTE_STYLE, opacity: 0.35 };
+const HIGHLIGHT_STYLE: L.PathOptions = { color: colors.navy, weight: 8, opacity: 1, lineCap: 'round', lineJoin: 'round' };
 
-export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
+export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress, route, highlight, user, fitTo }: CampusMapProps) {
   const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
   const toPos = useMemo<L.LatLngTuple | undefined>(() => to && [to.lat, to.lng], [to?.lat, to?.lng]);
-  const route = useMemo(() => (fromPos && toPos ? [fromPos, toPos] : undefined), [fromPos, toPos]);
+  const path = useMemo(
+    () => (route ? route.map(toTuple) : fromPos && toPos ? [fromPos, toPos] : undefined),
+    [route, fromPos, toPos],
+  );
+  const highlightPath = useMemo(() => highlight?.map(toTuple), [highlight]);
+  const frame = useMemo(
+    () => (fitTo ? fitTo.map(toTuple) : ([fromPos, toPos].filter(Boolean) as L.LatLngTuple[])),
+    [fitTo, fromPos, toPos],
+  );
 
   return (
     <MapContainer
@@ -109,15 +127,17 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
         maxZoom={19}
       />
       <ZoomControl position="bottomright" />
-      <FitBounds from={from} to={to} />
+      <FitBounds points={frame} />
 
       {places.map((p) => (
         <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
       ))}
 
-      {route && <Polyline positions={route} pathOptions={ROUTE_STYLE} />}
+      {path && <Polyline positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} />}
+      {highlightPath && <Polyline positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} />}
       {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
       {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}
+      {user && <Marker position={toTuple(user)} icon={USER_ICON} zIndexOffset={2000} interactive={false} />}
     </MapContainer>
   );
 });

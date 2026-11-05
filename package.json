@@ -35,7 +35,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "build:web": "expo export -p web",
-    "preview:web": "expo export -p web && expo serve --port 8082"
+    "preview:web": "expo export -p web && expo serve --port 8082",
+    "build:graph": "node scripts/build-campus-graph.mjs"
   },
   "private": true
 }

@@ -138,7 +138,7 @@ export default function Home() {
                 </Pressable>
                 {!mobile && (
                   <View style={{ flex: 1.3 }}>
-                    <TravelModes meters={closest.meters} selected={mode} onSelect={setMode} />
+                    <TravelModes minutes={(m) => travelMinutes(closest.meters, m)} selected={mode} onSelect={setMode} />
                   </View>
                 )}
               </>

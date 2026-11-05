@@ -1,17 +1,18 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { TRAVEL_MODES, travelMinutes, type TravelMode } from '@/lib/geo';
+import { TRAVEL_MODES, type TravelMode } from '@/lib/geo';
 import { colors, radius } from '@/theme';
 
 type Props = {
-  meters: number;
+  /** Minutes for each mode; undefined when the mode has no route. */
+  minutes: (mode: TravelMode) => number | undefined;
   selected: TravelMode;
   onSelect: (mode: TravelMode) => void;
   compact?: boolean;
 };
 
-/** Row of travel-mode tiles (Walk, Bike, ...) with estimated minutes. */
-export function TravelModes({ meters, selected, onSelect, compact }: Props) {
+/** Row of travel-mode tiles (Walk, Bike, ...) with travel times. */
+export function TravelModes({ minutes, selected, onSelect, compact }: Props) {
   return (
     <View style={styles.row}>
       {TRAVEL_MODES.map((m) => {
@@ -30,7 +31,7 @@ export function TravelModes({ meters, selected, onSelect, compact }: Props) {
               {compact && m.id === 'skate' ? 'Skate' : m.label}
             </Text>
             <Text style={[styles.time, { color: active ? colors.white : colors.textMuted }]}>
-              {travelMinutes(meters, m.id)} min
+              {minutes(m.id) === undefined ? 'No route' : `${minutes(m.id)} min`}
             </Text>
           </Pressable>
         );

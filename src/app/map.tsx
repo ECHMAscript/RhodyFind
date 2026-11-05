@@ -1,25 +1,25 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Header } from '@/components/Header';
 import { LocationField } from '@/components/LocationField';
+import { NavigationPanel } from '@/components/NavigationPanel';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
 import { CATEGORY_META, LOCATIONS, type CampusLocation } from '@/data/locations';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
-import { arrivalTime, formatMiles, haversineMeters, travelMinutes, TRAVEL_MODES, type TravelMode } from '@/lib/geo';
+import { arrivalTime, distanceToPathMeters, formatMiles, TRAVEL_MODES, type LatLng, type TravelMode } from '@/lib/geo';
+import { buildSteps } from '@/lib/routing/directions';
+import { findRoute, type Route } from '@/lib/routing/router';
 import { findNearest } from '@/lib/search';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
+import { useWatchPosition } from '@/lib/useWatchPosition';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
-const GOOGLE_MODE: Record<TravelMode, string> = {
-  walk: 'walking',
-  bike: 'bicycling',
-  skate: 'walking',
-  shuttle: 'transit',
-  drive: 'driving',
-};
+const OFF_ROUTE_METERS = 40;
+// Farther than this from the route, the user is clearly not on campus yet.
+const FAR_AWAY_METERS = 1500;
 
 export default function MapScreen() {
   const params = useLocalSearchParams<{ from?: string; to?: string; mode?: TravelMode }>();
@@ -48,9 +48,52 @@ export default function MapScreen() {
     router.setParams({ to: p.id });
   }, []);
 
-  const meters = from && to ? haversineMeters(from, to) : undefined;
-  const minutes = meters !== undefined ? travelMinutes(meters, mode) : undefined;
+  // One route per travel mode, so every tile shows its real travel time.
+  const routes = useMemo(() => {
+    if (!from || !to) return undefined;
+    const r = {} as Record<TravelMode, Route | null>;
+    for (const m of TRAVEL_MODES) r[m.id] = findRoute(from, to, m.id);
+    return r;
+  }, [from, to]);
+  const route = routes?.[mode] ?? null;
+  const steps = useMemo(() => (route && from && to ? buildSteps(route, from.name, to.name) : []), [route, from, to]);
   const nearby = useMemo(() => (to ? findNearest(to, { k: 3, excludeId: to.id }) : []), [to]);
+
+  // Turn-by-turn navigation.
+  const [navigating, setNavigating] = useState(false);
+  const [rawStepIndex, setStepIndex] = useState(0);
+  // The reset below runs after render, so keep the index valid when a shorter route arrives.
+  const stepIndex = Math.min(rawStepIndex, Math.max(steps.length - 1, 0));
+  const [following, setFollowing] = useState(false);
+  const { position: user, error: watchError } = useWatchPosition(navigating && following);
+
+  useEffect(() => setStepIndex(0), [route]);
+  useEffect(() => {
+    if (!route) setNavigating(false);
+  }, [route]);
+
+  const userDistance = useMemo(() => (user && route ? distanceToPathMeters(user, route.coords) : undefined), [user, route]);
+  const offRoute = userDistance !== undefined && userDistance.meters > OFF_ROUTE_METERS && userDistance.meters < FAR_AWAY_METERS;
+  const farAway = userDistance !== undefined && userDistance.meters >= FAR_AWAY_METERS;
+
+  // While following, move to the step the user is currently on.
+  useEffect(() => {
+    if (!userDistance || userDistance.meters > OFF_ROUTE_METERS) return;
+    const i = steps.findIndex((s) => userDistance.segment >= s.startIndex && userDistance.segment < s.endIndex);
+    if (i >= 0) setStepIndex((cur) => Math.max(cur, i));
+  }, [userDistance, steps]);
+
+  const step = navigating ? steps[stepIndex] : undefined;
+  const highlight = useMemo(
+    () => (step && route && step.endIndex > step.startIndex ? route.coords.slice(step.startIndex, step.endIndex + 1) : undefined),
+    [step, route],
+  );
+  const fitTo = useMemo<LatLng[] | undefined>(() => {
+    if (!route) return undefined;
+    if (!step) return route.coords;
+    const pts = highlight ?? [route.coords[route.coords.length - 1]];
+    return following && user && !farAway ? [user, ...pts] : pts;
+  }, [route, step, highlight, following, user, farAway]);
 
   const useMyLocation = async () => {
     const coords = await locate();
@@ -58,18 +101,15 @@ export default function MapScreen() {
   };
 
   const startRoute = () => {
-    if (!from || !to) return;
-    Linking.openURL(
-      `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${GOOGLE_MODE[mode]}`,
-    );
+    setStepIndex(0);
+    setFollowing(!from?.id); // starting from "My location": follow by default
+    setNavigating(true);
   };
 
-  const panel = (
-    <ScrollView
-      style={[styles.panel, mobile && styles.panelMobile]}
-      contentContainerStyle={styles.panelContent}
-      keyboardShouldPersistTaps="handled"
-    >
+  const notice = watchError ?? (farAway ? "You're not near campus yet, so live tracking will start once you're close." : undefined);
+
+  const planner = (
+    <>
       <Pressable style={styles.back} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}>
         <MaterialCommunityIcons name="arrow-left" size={16} color={colors.navy} />
         <Text style={styles.backText}>Back to Search</Text>
@@ -119,21 +159,30 @@ export default function MapScreen() {
       </View>
       {geo.status === 'error' && <Text style={styles.error}>{geo.message}</Text>}
 
-      {meters !== undefined && minutes !== undefined ? (
+      {routes ? (
         <>
           <Text style={styles.section}>Travel Options</Text>
-          <TravelModes meters={meters} selected={mode} onSelect={setMode} compact />
+          <TravelModes minutes={(m) => routes[m]?.minutes} selected={mode} onSelect={setMode} compact />
 
-          <View style={styles.stats}>
-            <Stat icon="map-marker-distance" label="Distance" value={formatMiles(meters)} />
-            <Stat icon="timer-outline" label="Travel time" value={`~${minutes} min`} />
-            <Stat icon="clock-outline" label="Est. arrival" value={arrivalTime(minutes)} />
-          </View>
+          {route ? (
+            <>
+              <View style={styles.stats}>
+                <Stat icon="map-marker-distance" label="Distance" value={formatMiles(route.meters)} />
+                <Stat icon="timer-outline" label="Travel time" value={`${route.minutes} min`} />
+                <Stat icon="clock-outline" label="Est. arrival" value={arrivalTime(route.minutes)} />
+              </View>
 
-          <Pressable style={styles.start} onPress={startRoute}>
-            <MaterialCommunityIcons name="navigation-variant" size={18} color={colors.white} />
-            <Text style={styles.startText}>Start Route</Text>
-          </Pressable>
+              <Pressable style={styles.start} onPress={startRoute}>
+                <MaterialCommunityIcons name="navigation-variant" size={18} color={colors.white} />
+                <Text style={styles.startText}>Start Route</Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={styles.hint}>
+              <MaterialCommunityIcons name="information-outline" size={18} color={colors.navy} />
+              <Text style={styles.hintText}>No {TRAVEL_MODES.find((m) => m.id === mode)!.label.toLowerCase()} route between these places. Try another travel option.</Text>
+            </View>
+          )}
         </>
       ) : (
         <View style={styles.hint}>
@@ -163,7 +212,50 @@ export default function MapScreen() {
           ))}
         </>
       )}
+    </>
+  );
+
+  const panel = (
+    <ScrollView
+      style={[styles.panel, mobile && styles.panelMobile]}
+      contentContainerStyle={styles.panelContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      {navigating && route && to && steps.length ? (
+        <NavigationPanel
+          destination={to.name}
+          mode={mode}
+          route={route}
+          steps={steps}
+          stepIndex={stepIndex}
+          onStepChange={setStepIndex}
+          onEnd={() => {
+            setNavigating(false);
+            setFollowing(false);
+          }}
+          following={following}
+          onToggleFollow={() => setFollowing((f) => !f)}
+          offRoute={offRoute}
+          onReroute={() => user && setFrom(currentPosition(user))}
+          notice={notice}
+        />
+      ) : (
+        planner
+      )}
     </ScrollView>
+  );
+
+  const map = (
+    <CampusMap
+      places={LOCATIONS}
+      from={from}
+      to={to}
+      onPlacePress={onPlacePress}
+      route={route?.coords}
+      highlight={highlight}
+      user={farAway ? undefined : user}
+      fitTo={fitTo}
+    />
   );
 
   return (
@@ -172,17 +264,13 @@ export default function MapScreen() {
       <View style={[styles.body, mobile && styles.bodyMobile]}>
         {mobile ? (
           <>
-            <View style={styles.mapMobile}>
-              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={onPlacePress} />
-            </View>
+            <View style={styles.mapMobile}>{map}</View>
             {panel}
           </>
         ) : (
           <>
             {panel}
-            <View style={styles.map}>
-              <CampusMap places={LOCATIONS} from={from} to={to} onPlacePress={onPlacePress} />
-            </View>
+            <View style={styles.map}>{map}</View>
           </>
         )}
       </View>

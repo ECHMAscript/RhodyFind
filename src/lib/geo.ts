@@ -45,3 +45,27 @@ export function arrivalTime(minutes: number, from = new Date()): string {
   const t = new Date(from.getTime() + minutes * 60_000);
   return t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
+
+/**
+ * Distance from p to the nearest point of a path, and the index of the path
+ * segment (path[i] -> path[i + 1]) that point is on.
+ */
+export function distanceToPathMeters(p: LatLng, path: LatLng[]): { meters: number; segment: number } {
+  // Flat-earth projection around p; accurate to well under a meter at campus scale.
+  const kx = 111_320 * Math.cos(toRad(p.lat));
+  const ky = 110_540;
+  let best = { meters: Infinity, segment: 0 };
+  for (let i = 0; i < path.length - 1; i++) {
+    const ax = (path[i].lng - p.lng) * kx;
+    const ay = (path[i].lat - p.lat) * ky;
+    const bx = (path[i + 1].lng - p.lng) * kx;
+    const by = (path[i + 1].lat - p.lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < best.meters) best = { meters: d, segment: i };
+  }
+  return best;
+}

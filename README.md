@@ -13,13 +13,17 @@ WebAssembly**, benchmarked against a brute-force baseline.
 - **Maps** — Leaflet + OpenStreetMap on web, `react-native-maps` on iOS/Android
 - **Search** — `src/lib/search.ts` (`findNearest`). Currently a brute-force JS scan; this is the
   function the C++/WebAssembly k-d tree will replace.
+- **Routing** — fully in-app: A* over a campus walkway/road graph built from OpenStreetMap
+  (`src/lib/routing/`), with turn-by-turn directions and live location following.
 
 ## Run it
 
 ```bash
 npm install
-npx expo start --web     # website at http://localhost:8081
+npx expo start --web     # website at http://localhost:8081 (dev mode, live reload)
+npm run preview:web      # optimized build at http://localhost:8082 (how the real site feels)
 npx expo start           # then scan the QR code with Expo Go for the phone app
+npm run build:graph      # re-download campus paths from OpenStreetMap
 ```
 
 ## Layout
@@ -27,8 +31,10 @@ npx expo start           # then scan the QR code with Expo Go for the phone app
 ```
 src/app/            screens (index = home, map = route view)
 src/components/     Header, LocationField (autocomplete), TravelModes, map/CampusMap
-src/data/           campus locations (coordinates from OpenStreetMap)
-src/lib/            distance + travel-time math, search, current-location hook
+src/data/           campus locations and the routing graph (both from OpenStreetMap)
+src/lib/            distance + travel-time math, search, location hooks
+src/lib/routing/    graph, MinHeap, A* router, turn-by-turn directions
+scripts/            build-campus-graph.mjs (OSM -> src/data/campusGraph.json)
 ```
 
 Map data © OpenStreetMap contributors (ODbL).

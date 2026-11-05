@@ -1,28 +1,40 @@
-import { memo, useEffect, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, URI_CENTER } from '@/data/locations';
+import type { LatLng } from '@/lib/geo';
 import { colors } from '@/theme';
 import type { CampusMapProps } from './types';
 
+const toCoord = (p: LatLng) => ({ latitude: p.lat, longitude: p.lng });
+
 // Native (iOS/Android) map. The web build uses CampusMap.web.tsx instead.
-export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress }: CampusMapProps) {
+export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePress, route, highlight, user, fitTo }: CampusMapProps) {
   const ref = useRef<MapView>(null);
 
+  const frame = useMemo(
+    () => (fitTo ?? ([from, to].filter(Boolean) as LatLng[])).map(toCoord),
+    [fitTo, from?.lat, from?.lng, to?.lat, to?.lng],
+  );
   useEffect(() => {
-    const pts = [from, to].filter(Boolean).map((p) => ({ latitude: p!.lat, longitude: p!.lng }));
-    if (pts.length) {
-      ref.current?.fitToCoordinates(pts, { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true });
+    if (frame.length) {
+      ref.current?.fitToCoordinates(frame, { edgePadding: { top: 80, right: 80, bottom: 80, left: 80 }, animated: true });
     }
-  }, [from?.lat, from?.lng, to?.lat, to?.lng]);
+  }, [frame]);
+
+  const path = useMemo(
+    () => (route ? route.map(toCoord) : from && to ? [toCoord(from), toCoord(to)] : undefined),
+    [route, from?.lat, from?.lng, to?.lat, to?.lng],
+  );
+  const highlightPath = useMemo(() => highlight?.map(toCoord), [highlight]);
 
   return (
     <MapView
       ref={ref}
       style={StyleSheet.absoluteFill}
       initialRegion={{ latitude: URI_CENTER.lat, longitude: URI_CENTER.lng, latitudeDelta: 0.012, longitudeDelta: 0.012 }}
-      showsUserLocation
+      showsUserLocation={!user}
       showsPointsOfInterests={false}
     >
       {places.map((p) => (
@@ -44,18 +56,15 @@ export const CampusMap = memo(function CampusMap({ places, from, to, onPlacePres
         </Marker>
       ))}
 
-      {from && to && (
-        <Polyline
-          coordinates={[
-            { latitude: from.lat, longitude: from.lng },
-            { latitude: to.lat, longitude: to.lng },
-          ]}
-          strokeColor="#1F5FD1"
-          strokeWidth={6}
-        />
+      {path && <Polyline coordinates={path} strokeColor={highlightPath ? 'rgba(31,95,209,0.35)' : '#1F5FD1'} strokeWidth={6} />}
+      {highlightPath && <Polyline coordinates={highlightPath} strokeColor={colors.navy} strokeWidth={8} />}
+      {from && <Marker coordinate={toCoord(from)} pinColor={colors.keaney} />}
+      {to && <Marker coordinate={toCoord(to)} pinColor={colors.danger} />}
+      {user && (
+        <Marker coordinate={toCoord(user)} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false}>
+          <View style={styles.user} />
+        </Marker>
       )}
-      {from && <Marker coordinate={{ latitude: from.lat, longitude: from.lng }} pinColor={colors.keaney} />}
-      {to && <Marker coordinate={{ latitude: to.lat, longitude: to.lng }} pinColor={colors.danger} />}
     </MapView>
   );
 });
@@ -72,4 +81,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeMajor: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.navy },
+  user: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#1F5FD1', borderWidth: 3, borderColor: colors.white },
 });
