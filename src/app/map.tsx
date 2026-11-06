@@ -9,6 +9,7 @@ import { NavigationPanel } from '@/components/NavigationPanel';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
 import { CATEGORY_META, LOCATIONS, type CampusLocation } from '@/data/locations';
+import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
   arrivalTime,
@@ -341,6 +342,23 @@ export default function MapScreen() {
       </View>
       {geo.status === 'error' && <Text style={styles.error}>{geo.message}</Text>}
 
+      {to?.id && PLACE_DETAILS[to.id] && (
+        <Pressable
+          style={({ hovered }: any) => [styles.learnMore, hovered && { backgroundColor: colors.keaneyTint }]}
+          onPress={() => router.push(`/place/${to.id}`)}
+          accessibilityRole="button"
+        >
+          <MaterialCommunityIcons name="information-outline" size={20} color={colors.navy} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.learnMoreTitle}>Learn more about {to.name}</Text>
+            <Text style={styles.learnMoreSub} numberOfLines={1}>
+              Photo, floors, bathrooms and more
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.navy} />
+        </Pressable>
+      )}
+
       {routes ? (
         <>
           <Text style={styles.section}>Travel Options</Text>
@@ -555,6 +573,9 @@ const styles = StyleSheet.create({
   endpointLabel: { width: 38, fontSize: 13, fontWeight: '600', color: colors.textMuted },
   swap: { width: 36, height: 36, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.keaneyTint },
   error: { color: colors.danger, fontSize: 13 },
+  learnMore: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  learnMoreTitle: { fontSize: 14, fontWeight: '700', color: colors.navy },
+  learnMoreSub: { fontSize: 12, color: colors.textMuted },
 
   section: { marginTop: 6, fontSize: 15, fontWeight: '700', color: colors.navy },
 

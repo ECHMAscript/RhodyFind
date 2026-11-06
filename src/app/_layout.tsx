@@ -19,6 +19,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ title: 'RhodyFind' }} />
         <Stack.Screen name="map" options={{ title: 'Map · RhodyFind' }} />
         <Stack.Screen name="performance" options={{ title: 'Performance · RhodyFind' }} />
+        <Stack.Screen name="place/[id]" options={{ title: 'Place · RhodyFind' }} />
       </Stack>
     </>
   );

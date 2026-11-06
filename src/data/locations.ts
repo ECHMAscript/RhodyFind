@@ -70,6 +70,8 @@ export const LOCATIONS: CampusLocation[] = [
   { id: 'edwards', name: 'Edwards Auditorium', category: 'academic', subtitle: 'Auditorium', lat: 41.48516, lng: -71.5263 },
   { id: 'carlotti', name: 'Carlotti Administration Building', category: 'academic', subtitle: 'Enrollment services', lat: 41.48609, lng: -71.52858 },
   { id: 'coastal-institute', name: 'Coastal Institute Kingston', category: 'academic', subtitle: 'Environmental sciences', lat: 41.48996, lng: -71.52653 },
+  { id: 'swan-hall', name: 'Swan Hall', category: 'academic', subtitle: 'Humanities classrooms · 60 Upper College Rd', lat: 41.48457, lng: -71.5263 },
+  { id: 'pastore-hall', name: 'Pastore Hall', category: 'academic', subtitle: 'Classrooms & labs · 51 Lower College Rd', lat: 41.48455, lng: -71.5284 },
 
   // Libraries
   { id: 'carothers', name: 'Robert L. Carothers Library', category: 'library', subtitle: 'Main library', lat: 41.48759, lng: -71.5288, major: true },
