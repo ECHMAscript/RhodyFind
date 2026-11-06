@@ -83,7 +83,8 @@ export const LOCATIONS: CampusLocation[] = [
   { id: 'butterfield', name: 'Butterfield Dining Hall', category: 'dining', subtitle: 'Dining hall', lat: 41.48498, lng: -71.53157 },
   { id: 'rams-den', name: "Ram's Den", category: 'dining', subtitle: 'Café · Memorial Union', lat: 41.48545, lng: -71.5298 },
   { id: 'rhody-market', name: 'Rhody Market', category: 'dining', subtitle: 'Grab & go', lat: 41.48721, lng: -71.53135 },
-  { id: '193-coffee', name: '193 Degree Coffeehouse', category: 'dining', subtitle: 'Café', lat: 41.48446, lng: -71.52966 },
+  // In room 200 of the Memorial Union (URI Memorial Union, Good 5¢ Cigar).
+  { id: '193-coffee', name: '193 Coffeehouse', category: 'dining', subtitle: 'Student-run café · Memorial Union', lat: 41.48512, lng: -71.52972 },
   { id: 'dunkin-union', name: "Dunkin' (Memorial Union)", category: 'dining', subtitle: 'Coffee', lat: 41.48551, lng: -71.52994 },
   { id: 'bru-ri', name: 'Bru RI Coffee Bar', category: 'dining', subtitle: 'Café · Kingston', lat: 41.48432, lng: -71.52353 },
   { id: 'kingston-pizza', name: 'Kingston Pizza', category: 'dining', subtitle: 'Restaurant · Kingston', lat: 41.48318, lng: -71.52383 },
