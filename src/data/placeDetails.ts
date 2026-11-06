@@ -1,4 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
+import { RESTROOMS } from './locations';
+import { PHOTOS, type Photo } from './photos';
 
 /**
  * What the "Learn more" page shows for a place. Every fact here comes from a
@@ -23,6 +25,8 @@ export type PlaceDetails = {
   /** A photo of the building: require('@/assets/places/<id>.jpg'). */
   photo?: ImageSourcePropType;
   photoCredit?: string;
+  /** Where the photo's author and license are listed. */
+  photoCreditUrl?: string;
   /** Where to see a photo when the app can't show one (no license to copy it). */
   photoLink?: { label: string; url: string };
   sources: { label: string; url: string }[];
@@ -650,7 +654,6 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
     built: '1953',
     floors: 'At least 3: classrooms on the 1st, 2nd and 3rd floors. Basement not confirmed.',
     classrooms: '1st floor (rooms 122–124), 2nd floor (201–259) and 3rd floor (305–350), 30 to 198 seats',
-    bathrooms: 'Gender-inclusive restroom on the 1st floor, room 114A (URI list, 2021)',
     highlights: [
       'Room 124 is a 198-seat lecture hall',
       'Temporary home of URI’s art program during the Fine Arts Center renovation (2022)',
@@ -665,7 +668,38 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
         url: 'https://www.independentri.com/news/article_48a73d38-81de-11ed-8e73-170e7bb1ae48.html',
       },
       { label: 'URI News: chemistry center replaces Pastore Hall', url: 'https://www.uri.edu/news/?p=59591' },
-      { label: 'URI Gender & Sexuality Center (restroom list, 2021)', url: 'https://web.uri.edu/gender-sexuality/' },
     ],
   },
 };
+
+// URI's list of gender-inclusive restrooms (2021, archived copy; the page has
+// since been taken down).
+const RESTROOM_LIST = {
+  label: 'URI Gender & Sexuality Center: gender-inclusive restrooms (2021, archived)',
+  url: 'https://web.archive.org/web/20260908195923/https://web.uri.edu/gender-sexuality/restrooms/',
+};
+for (const [id, where] of Object.entries(RESTROOMS)) {
+  const d = PLACE_DETAILS[id];
+  if (!d) continue;
+  const listed = `Gender-inclusive: ${where} (URI list, 2021)`;
+  d.bathrooms = d.bathrooms ? `${d.bathrooms}. ${listed}` : listed;
+  d.sources.push(RESTROOM_LIST);
+}
+
+// Free-license photos of buildings (credits in data/photos.ts).
+const BUILDING_PHOTOS: Record<string, Photo> = {
+  quad: PHOTOS.quad,
+  'green-hall': PHOTOS.greenHall,
+  carothers: PHOTOS.carothers,
+  'memorial-union': PHOTOS.memorialUnion,
+  washburn: PHOTOS.washburn,
+  'engineering-quad': PHOTOS.engineering,
+  edwards: PHOTOS.edwards1928,
+};
+for (const [id, photo] of Object.entries(BUILDING_PHOTOS)) {
+  const d = PLACE_DETAILS[id];
+  if (!d) continue;
+  d.photo = photo.source;
+  d.photoCredit = `Photo: ${photo.credit}${id === 'edwards' ? ' · Edwards Hall in 1928' : ''}`;
+  d.photoCreditUrl = photo.url;
+}

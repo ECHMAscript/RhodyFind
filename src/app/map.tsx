@@ -8,7 +8,7 @@ import { LocationField } from '@/components/LocationField';
 import { NavigationPanel } from '@/components/NavigationPanel';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
-import { CATEGORY_META, LOCATIONS, type CampusLocation } from '@/data/locations';
+import { CATEGORY_META, LOCATION_BY_ID, PLACES, type CampusLocation } from '@/data/locations';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
@@ -83,6 +83,11 @@ export default function MapScreen() {
     return r;
   }, [from, to]);
   const route = routes?.[mode] ?? null;
+  // The place a "Learn more" page is about: the destination, or the building
+  // a destination restroom or printer is in.
+  const toPlace = to?.id ? LOCATION_BY_ID[to.id] : undefined;
+  const aboutId = toPlace && (PLACE_DETAILS[toPlace.id] ? toPlace.id : toPlace.building);
+  const aboutPlace = aboutId && PLACE_DETAILS[aboutId] ? LOCATION_BY_ID[aboutId] : undefined;
   const nearby = useMemo(() => (to ? findNearest(to, { k: 3, excludeId: to.id }) : []), [to]);
 
   // Turn-by-turn navigation. Navigation belongs to the route it was started
@@ -342,15 +347,15 @@ export default function MapScreen() {
       </View>
       {geo.status === 'error' && <Text style={styles.error}>{geo.message}</Text>}
 
-      {to?.id && PLACE_DETAILS[to.id] && (
+      {aboutPlace && (
         <Pressable
           style={({ hovered }: any) => [styles.learnMore, hovered && { backgroundColor: colors.keaneyTint }]}
-          onPress={() => router.push(`/place/${to.id}`)}
+          onPress={() => router.push(`/place/${aboutPlace.id}`)}
           accessibilityRole="button"
         >
           <MaterialCommunityIcons name="information-outline" size={20} color={colors.navy} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.learnMoreTitle}>Learn more about {to.name}</Text>
+            <Text style={styles.learnMoreTitle}>Learn more about {aboutPlace.name}</Text>
             <Text style={styles.learnMoreSub} numberOfLines={1}>
               Photo, floors, bathrooms and more
             </Text>
@@ -457,7 +462,7 @@ export default function MapScreen() {
 
   const map = (
     <CampusMap
-      places={LOCATIONS}
+      places={PLACES}
       from={from}
       to={to}
       onPlacePress={onPlacePress}

@@ -8,7 +8,9 @@ export type Category =
   | 'library'
   | 'parking'
   | 'store'
-  | 'recreation';
+  | 'recreation'
+  | 'restroom'
+  | 'printing';
 
 export type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -23,6 +25,8 @@ export type CampusLocation = {
   major?: boolean;
   /** Which side of the pin a major area's label sits on (default top). */
   labelSide?: 'top' | 'bottom' | 'left' | 'right';
+  /** For a restroom or printer: the id of the building it's in. */
+  building?: string;
 };
 
 export const CATEGORY_META: Record<Category, { label: string; icon: IconName }> = {
@@ -33,15 +37,24 @@ export const CATEGORY_META: Record<Category, { label: string; icon: IconName }> 
   parking: { label: 'Parking', icon: 'alpha-p-circle' },
   store: { label: 'Stores', icon: 'storefront' },
   recreation: { label: 'Recreation', icon: 'basketball' },
+  restroom: { label: 'Bathrooms', icon: 'human-male-female' },
+  printing: { label: 'Printing', icon: 'printer' },
 };
 
-/** Categories shown as quick filters on the home page. */
-export const QUICK_CATEGORIES: Category[] = ['dining', 'library', 'academic', 'parking'];
+/** The "See what's closest to you" tiles on the home page, in order. */
+export const QUICK_CATEGORIES: Category[] = ['restroom', 'dining', 'printing', 'library', 'academic', 'parking'];
+
+/**
+ * Things inside buildings rather than places of their own. They're found by
+ * "closest bathroom / printer" searches, but aren't pinned on the map or
+ * listed as nearby places.
+ */
+export const AMENITY_CATEGORIES: Category[] = ['restroom', 'printing'];
 
 export const URI_CENTER = { lat: 41.4865, lng: -71.5295 };
 
 // Coordinates come from OpenStreetMap (© OpenStreetMap contributors, ODbL).
-export const LOCATIONS: CampusLocation[] = [
+const BUILDINGS: CampusLocation[] = [
   // Landmarks / major areas
   { id: 'quad', name: 'The Quad', category: 'landmark', subtitle: 'Historic quadrangle', lat: 41.48635, lng: -71.52736, major: true },
   { id: 'memorial-union', name: 'Memorial Union', category: 'landmark', subtitle: 'Student center', lat: 41.48506, lng: -71.5299, major: true },
@@ -109,6 +122,57 @@ export const LOCATIONS: CampusLocation[] = [
   { id: 'mackal', name: 'Mackal Field House', category: 'recreation', subtitle: 'Indoor track', lat: 41.48518, lng: -71.53594 },
   { id: 'tootell', name: 'Tootell Aquatic Center', category: 'recreation', subtitle: 'Pool', lat: 41.48684, lng: -71.53593 },
   { id: 'boss-arena', name: 'Boss Ice Arena', category: 'recreation', subtitle: 'Ice rink', lat: 41.48388, lng: -71.53802 },
+];
+
+// Restrooms, from URI's list of gender-inclusive restrooms (as of 2021):
+// building id -> where they are. Quinn and the Welcome Center are from an
+// accessibility review (Critique Access). Every building also has standard
+// restrooms; these are the ones a public source names.
+export const RESTROOMS: Record<string, string> = {
+  avedisian: '2nd floor (rooms 230B, 291), 3rd floor (387A)',
+  beaupre: '1st floor (room 160)',
+  butterfield: '1st floor, room 152 (turn right before you swipe in)',
+  carlotti: 'Basement (room 07)',
+  chafee: '1st floor (room 103)',
+  edwards: '1st floor (rooms 105, 106)',
+  'anna-fascitelli': 'Basement (room 06), 1st floor (rooms 106, 107)',
+  'green-hall': '1st floor (124, 125), 2nd floor (214, 215), 3rd floor (308, 309)',
+  'hope-commons': '1st floor (108), 2nd floor (217, 218, 223, 224)',
+  'keaney-gym': '1st floor (room 113A)',
+  'memorial-union': '3rd floor (room 321)',
+  'pastore-hall': '1st floor (room 114A)',
+  carothers: '1st floor (108, 109), 2nd floor (232, 233), 3rd floor (304, 305, 316, 317)',
+  'white-hall': 'Basement (room 07), 1st floor (107B)',
+};
+const REVIEWED_RESTROOMS: Record<string, string> = {
+  'welcome-center': 'Accessible restrooms',
+  quinn: 'Accessible restrooms on the 1st floor',
+};
+
+// Printers for students, from URI ITS "Pay for Print", plus the print shop.
+const PRINTERS: Record<string, string> = {
+  carothers: 'Color printers: Learning Commons and 24-Hour Study Room, 2nd floor',
+  'memorial-union': 'Printer in the 2nd-floor lounge; Campus Copy & Sign Shop on the 1st floor',
+  avedisian: 'Printer in the 1st-floor lounge',
+};
+
+const BUILDING_BY_ID = Object.fromEntries(BUILDINGS.map((b) => [b.id, b]));
+
+function inBuilding(category: Category, buildingId: string, subtitle: string): CampusLocation {
+  const b = BUILDING_BY_ID[buildingId];
+  const kind = category === 'restroom' ? 'Restrooms' : 'Printing';
+  return { id: `${category}-${buildingId}`, name: `${kind} · ${b.name}`, category, subtitle, lat: b.lat, lng: b.lng, building: b.id };
+}
+
+/** Buildings and places: what the map pins and "nearby" lists show. */
+export const PLACES = BUILDINGS;
+
+/** Everything searchable, including restrooms and printers inside buildings. */
+export const LOCATIONS: CampusLocation[] = [
+  ...BUILDINGS,
+  ...Object.entries(RESTROOMS).map(([id, where]) => inBuilding('restroom', id, `Gender-inclusive: ${where}`)),
+  ...Object.entries(REVIEWED_RESTROOMS).map(([id, where]) => inBuilding('restroom', id, where)),
+  ...Object.entries(PRINTERS).map(([id, where]) => inBuilding('printing', id, where)),
 ];
 
 export const LOCATION_BY_ID: Record<string, CampusLocation> = Object.fromEntries(

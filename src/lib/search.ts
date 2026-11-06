@@ -1,10 +1,10 @@
-import { LOCATIONS, type CampusLocation, type Category } from '@/data/locations';
+import { LOCATIONS, PLACES, type CampusLocation, type Category } from '@/data/locations';
 import { haversineMeters, type LatLng } from './geo';
 import { SpatialIndex, spatialEngineReady } from './spatial/engine';
 
 export type NearestResult = { location: CampusLocation; meters: number };
 
-// One k-d tree per category (plus one for everything), built the first time
+// One k-d tree per category (plus one for all places), built the first time
 // it's needed after the WebAssembly engine has loaded.
 const indexes = new Map<Category | 'all', { index: SpatialIndex; locations: CampusLocation[] }>();
 
@@ -12,7 +12,7 @@ function locationIndex(category: Category | undefined) {
   const key = category ?? 'all';
   let entry = indexes.get(key);
   if (!entry && spatialEngineReady()) {
-    const locations = category ? LOCATIONS.filter((l) => l.category === category) : LOCATIONS;
+    const locations = category ? LOCATIONS.filter((l) => l.category === category) : PLACES;
     const index = SpatialIndex.fromLatLng(locations);
     if (index) indexes.set(key, (entry = { index, locations }));
   }
@@ -21,6 +21,7 @@ function locationIndex(category: Category | undefined) {
 
 /**
  * Finds the k closest locations to `origin`, optionally limited to one category.
+ * Without a category it searches places only (not restrooms or printers).
  *
  * This is the front end's only entry point into nearest-neighbor search. It
  * queries the C++ k-d tree (WebAssembly) when it's loaded, and otherwise falls
@@ -50,7 +51,8 @@ export function findNearestBruteForce(
   opts: { category?: Category; k?: number; excludeId?: string } = {},
 ): NearestResult[] {
   const { category, k = 5, excludeId } = opts;
-  return LOCATIONS.filter((l) => (!category || l.category === category) && l.id !== excludeId)
+  return (category ? LOCATIONS.filter((l) => l.category === category) : PLACES)
+    .filter((l) => l.id !== excludeId)
     .map((location) => ({ location, meters: haversineMeters(origin, location) }))
     .sort((a, b) => a.meters - b.meters)
     .slice(0, k);

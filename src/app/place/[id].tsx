@@ -46,13 +46,24 @@ export default function PlaceScreen() {
 
         {details?.photo ? (
           <View>
-            <Image
-              source={details.photo}
-              style={styles.photo}
-              resizeMode="cover"
-              accessibilityLabel={`Photo of ${place.name}`}
-            />
-            {details.photoCredit && <Text style={styles.credit}>{details.photoCredit}</Text>}
+            <View style={[styles.photo, styles.photoFrame]}>
+              <Image
+                source={details.photo}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+                accessibilityLabel={`Photo of ${place.name}`}
+              />
+            </View>
+            {details.photoCredit && (
+              <Text
+                style={styles.credit}
+                onPress={details.photoCreditUrl ? () => Linking.openURL(details.photoCreditUrl!) : undefined}
+                accessibilityRole={details.photoCreditUrl ? 'link' : undefined}
+              >
+                {details.photoCredit}
+                {details.photoCreditUrl ? ' · Wikimedia Commons' : ''}
+              </Text>
+            )}
           </View>
         ) : (
           <View style={[styles.photo, styles.photoEmpty]}>
@@ -148,6 +159,7 @@ const styles = StyleSheet.create({
   backText: { color: colors.navy, fontWeight: '600', fontSize: 14 },
 
   photo: { width: '100%', aspectRatio: 16 / 9, borderRadius: radius.lg, backgroundColor: colors.keaneyTint },
+  photoFrame: { overflow: 'hidden' },
   photoEmpty: { alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoEmptyText: { color: colors.navy, fontWeight: '600', fontSize: 14 },
   photoLink: { color: colors.navy, fontSize: 13, textDecorationLine: 'underline', textAlign: 'center', paddingHorizontal: 16 },
