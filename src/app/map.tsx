@@ -27,11 +27,24 @@ import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
 const OFF_ROUTE_METERS = 30;
-const ARRIVED_METERS = 15;
+// Arrived when this close along the route...
+const ARRIVED_METERS = 20;
+// ...or this close to the destination itself, in a straight line.
+const ARRIVE_RADIUS = 25;
+const ARRIVE_RADIUS_CAR = 50;
+// How far ahead along the route a new fix is matched (more when moving fast).
+const LOOKAHEAD_METERS = 300;
+// Faster than this (m/s, about 18 mph) on a walking route: probably in a car.
+const DRIVING_SPEED = 8;
 const REROUTE_AFTER_FIXES = 2;
 const REROUTE_COOLDOWN_MS = 3000;
 // Farther than this from the route, the user is clearly not on campus yet.
 const FAR_AWAY_METERS = 1500;
+
+/** The direction of travel, when the user is moving fast enough for it to be reliable. */
+function movingHeading(fix: LiveFix): number | undefined {
+  return (fix.speed ?? 0) > 1.5 ? fix.heading : undefined;
+}
 
 export default function MapScreen() {
   const params = useLocalSearchParams<{ from?: string; to?: string; mode?: TravelMode }>();
@@ -98,16 +111,29 @@ export default function MapScreen() {
   const stepIndex = Math.min(rawStepIndex, Math.max(steps.length - 1, 0));
   const setStepIndex = useCallback((index: number) => setStepSel({ route: activeRoute, index }), [activeRoute]);
 
+  // How far along the route the user has gotten (a segment index), tagged with
+  // its route. Matching a fix only near this point keeps the tracker from
+  // jumping to another part of a route that passes close to itself.
+  const [progress, setProgress] = useState<{ route: Route | null; segment: number }>({ route: null, segment: 0 });
+  const progressSegment = progress.route === activeRoute ? progress.segment : 0;
+
   // Where the user is relative to the route: O(route length) per GPS fix.
-  const track = useMemo(
-    () => (user && activeRoute ? distanceToPathMeters(user, activeRoute.coords) : undefined),
-    [user, activeRoute],
-  );
+  const track = useMemo(() => {
+    if (!user || !activeRoute || !cum) return undefined;
+    const coords = activeRoute.coords;
+    const lookahead = Math.max(LOOKAHEAD_METERS, (fix?.speed ?? 0) * 15);
+    let last = progressSegment;
+    while (last < coords.length - 2 && cum[last + 1] - cum[progressSegment] < lookahead) last++;
+    const near = distanceToPathMeters(user, coords, progressSegment - 2, last);
+    if (near.meters <= OFF_ROUTE_METERS) return near;
+    // Not near where we expected (a shortcut, or GPS was out for a while): look at the whole route.
+    const anywhere = distanceToPathMeters(user, coords);
+    return anywhere.meters < near.meters ? anywhere : near;
+  }, [user, activeRoute, cum, progressSegment, fix?.speed]);
   // Don't call a fix "off route" just because the GPS itself is fuzzy.
   const offRouteLimit = Math.max(OFF_ROUTE_METERS, Math.min(fix?.accuracy ?? 0, 60));
   const farAway = !!track && track.meters >= FAR_AWAY_METERS;
   const onRoute = !!track && track.meters <= offRouteLimit;
-  const offRoute = !!track && !onRoute && !farAway;
 
   // Meters left along the route from the user's spot on it (to the end, and to the end of a step).
   const metersFromUserTo = useCallback(
@@ -120,10 +146,19 @@ export default function MapScreen() {
     [track, cum, activeRoute],
   );
   const lastIndex = activeRoute ? activeRoute.coords.length - 1 : 0;
-  const remainingMeters = navigating && onRoute ? metersFromUserTo(lastIndex) : undefined;
+
+  // Arrival is sticky for the trip: once there, GPS wobble can't "un-arrive" or reroute.
+  const [arrivedOn, setArrivedOn] = useState<Route | null>(null);
+  const arrived = navigating && arrivedOn === route;
+  const offRoute = !!track && !onRoute && !farAway && !arrived;
+  const remainingMeters = arrived ? 0 : navigating && onRoute ? metersFromUserTo(lastIndex) : undefined;
+
+  // Seen driving while the route is for walking or skating: offer to switch.
+  const [drivingHint, setDrivingHint] = useState(false);
 
   // React to each new GPS fix during render (no extra commit per fix):
-  //  - on the route: move to the step the user is on, or "Arrive" at the end;
+  //  - arrived: close enough to the destination, or at the end of the route;
+  //  - on the route: move to the step the user is on;
   //  - off it (a wrong turn, a shortcut, walking the other way): reroute from
   //    where they are. Two off-route fixes in a row avoid rerouting on one GPS jump.
   const [handledFix, setHandledFix] = useState<LiveFix | undefined>(undefined);
@@ -131,18 +166,30 @@ export default function MapScreen() {
   const [lastRerouteAt, setLastRerouteAt] = useState(0);
   if (fix !== handledFix) {
     setHandledFix(fix);
-    if (navigating && fix && track && activeRoute && to) {
-      if (onRoute) {
+    if (navigating && !arrived && fix && track && activeRoute && to && route) {
+      if (!drivingHint && (mode === 'walk' || mode === 'skate') && (fix.speed ?? 0) > DRIVING_SPEED) setDrivingHint(true);
+      const byCar = mode === 'drive' || mode === 'shuttle';
+      const radius = Math.max(byCar ? ARRIVE_RADIUS_CAR : ARRIVE_RADIUS, Math.min(fix.accuracy, 40));
+      const atDestination = haversineMeters(fix.position, to) <= radius;
+      const remaining = onRoute ? metersFromUserTo(lastIndex) : undefined;
+      // Drivers stop where the road ends (a lot or curb), then walk the last bit.
+      const parked = byCar && onRoute && track.segment >= activeRoute.networkEnd;
+      if (atDestination || parked || (remaining !== undefined && remaining < ARRIVED_METERS)) {
+        setArrivedOn(route);
+        setStepSel({ route: activeRoute, index: steps.length - 1 });
+      } else if (onRoute) {
         if (offFixes) setOffFixes(0);
-        const i =
-          remainingMeters !== undefined && remainingMeters < ARRIVED_METERS
-            ? steps.length - 1
-            : steps.findIndex((st) => track.segment >= st.startIndex && track.segment < st.endIndex);
+        // Progress only moves forward; GPS noise near a corner can't pull it back.
+        if (track.segment > progressSegment) setProgress({ route: activeRoute, segment: track.segment });
+        const i = steps.findIndex((st) => track.segment >= st.startIndex && track.segment < st.endIndex);
         if (i > stepIndex) setStepSel({ route: activeRoute, index: i });
       } else if (offRoute) {
         const n = offFixes + 1;
-        const r = n >= REROUTE_AFTER_FIXES && fix.time - lastRerouteAt >= REROUTE_COOLDOWN_MS ? findRoute(fix.position, to, mode) : null;
-        if (r && route) {
+        const r =
+          n >= REROUTE_AFTER_FIXES && fix.time - lastRerouteAt >= REROUTE_COOLDOWN_MS
+            ? findRoute(fix.position, to, mode, { heading: movingHeading(fix) })
+            : null;
+        if (r) {
           setRerouted({ base: route, route: r }); // only the current mode: a few ms
           setLastRerouteAt(fix.time);
           setOffFixes(0);
@@ -155,33 +202,48 @@ export default function MapScreen() {
 
   const rerouteNow = () => {
     if (!user || !to || !route) return;
-    const r = findRoute(user, to, mode);
+    const r = findRoute(user, to, mode, { heading: fix && movingHeading(fix) });
     if (r) {
       setRerouted({ base: route, route: r });
       setLastRerouteAt(fix?.time ?? Date.now());
     }
   };
 
+  // Switch travel mode mid-trip, continuing from where the user is.
+  const switchMode = (m: TravelMode) => {
+    const base = routes?.[m];
+    setMode(m);
+    setDrivingHint(false);
+    if (!base) return;
+    setNavRoute(base);
+    setStepSel({ route: base, index: 0 });
+    const r = user && to ? findRoute(user, to, m, { heading: fix && movingHeading(fix) }) : null;
+    setRerouted(r ? { base, route: r } : null);
+  };
+
   const live = navigating && following && onRoute && !!track;
-  // While tracking, draw only the part of the route still ahead of the user.
+  // While tracking, draw only the route from the user's current segment on.
+  // Cutting at a vertex (not at the 1-per-second GPS point) keeps the line
+  // still under the smoothly gliding dot instead of jumping each second.
   const routeShown = useMemo(() => {
     if (!activeRoute) return undefined;
     if (!live || !track) return activeRoute.coords;
-    return [track.point, ...activeRoute.coords.slice(track.segment + 1)];
-  }, [activeRoute, live, track]);
+    return activeRoute.coords.slice(Math.max(track.segment, progressSegment));
+  }, [activeRoute, live, track, progressSegment]);
 
   const step = navigating ? steps[stepIndex] : undefined;
   const highlight = useMemo(() => {
     if (!step || !activeRoute || step.endIndex <= step.startIndex) return undefined;
-    // If the user is partway through this step, start the highlight at them.
-    if (live && track && track.segment >= step.startIndex && track.segment < step.endIndex) {
-      return [track.point, ...activeRoute.coords.slice(track.segment + 1, step.endIndex + 1)];
+    // If the user is partway through this step, start the highlight at their segment.
+    const at = track ? Math.max(track.segment, progressSegment) : -1;
+    if (live && at >= step.startIndex && at < step.endIndex) {
+      return activeRoute.coords.slice(at, step.endIndex + 1);
     }
     return activeRoute.coords.slice(step.startIndex, step.endIndex + 1);
-  }, [step, activeRoute, live, track]);
+  }, [step, activeRoute, live, track, progressSegment]);
   const stepMetersLeft = live && step ? metersFromUserTo(step.endIndex) : undefined;
 
-  const followUser = navigating && following && !cameraFree && user && !farAway ? user : undefined;
+  const follow = navigating && following && !cameraFree && !!user && !farAway;
   const fitTo = useMemo<LatLng[] | undefined>(() => {
     if (!activeRoute) return undefined;
     if (!step) return activeRoute.coords;
@@ -199,12 +261,16 @@ export default function MapScreen() {
     setFollowing(true);
     setCameraFree(false);
     setRerouted(null);
+    setArrivedOn(null);
+    setDrivingHint(false);
     setNavRoute(route);
   };
   const endRoute = () => {
     setNavRoute(null);
     setFollowing(false);
     setRerouted(null);
+    setArrivedOn(null);
+    setDrivingHint(false);
   };
 
   const notice = watchError ?? (farAway ? "You're not near campus yet, so live tracking will start once you're close." : undefined);
@@ -340,6 +406,12 @@ export default function MapScreen() {
           onReroute={rerouteNow}
           remainingMeters={remainingMeters}
           stepMetersLeft={stepMetersLeft}
+          arrived={arrived}
+          suggestion={
+            drivingHint && routes?.drive
+              ? { text: 'Looks like you’re driving.', action: 'Switch to Drive', onPress: () => switchMode('drive') }
+              : undefined
+          }
           notice={notice}
         />
       ) : (
@@ -356,10 +428,9 @@ export default function MapScreen() {
       onPlacePress={onPlacePress}
       route={routeShown}
       highlight={highlight}
-      user={farAway ? undefined : user}
-      heading={fix?.heading}
+      userFix={farAway ? undefined : fix}
+      follow={follow}
       fitTo={fitTo}
-      followUser={followUser}
       onUserPan={onUserPan}
     />
   );

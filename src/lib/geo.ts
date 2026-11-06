@@ -48,14 +48,22 @@ export function arrivalTime(minutes: number, from = new Date()): string {
 
 /**
  * Closest point of a path to p: its distance, the index of the path segment
- * (path[i] -> path[i + 1]) it lies on, and the point itself.
+ * (path[i] -> path[i + 1]) it lies on, and the point itself. Optionally only
+ * segments firstSegment..lastSegment are considered.
  */
-export function distanceToPathMeters(p: LatLng, path: LatLng[]): { meters: number; segment: number; point: LatLng } {
+export function distanceToPathMeters(
+  p: LatLng,
+  path: LatLng[],
+  firstSegment = 0,
+  lastSegment = path.length - 2,
+): { meters: number; segment: number; point: LatLng } {
   // Flat-earth projection around p; accurate to well under a meter at campus scale.
   const kx = 111_320 * Math.cos(toRad(p.lat));
   const ky = 110_540;
-  let best = { meters: Infinity, segment: 0, point: path[0] ?? p };
-  for (let i = 0; i < path.length - 1; i++) {
+  const lo = Math.max(0, firstSegment);
+  const hi = Math.min(path.length - 2, lastSegment);
+  let best = { meters: Infinity, segment: lo, point: path[lo] ?? p };
+  for (let i = lo; i <= hi; i++) {
     const ax = (path[i].lng - p.lng) * kx;
     const ay = (path[i].lat - p.lat) * ky;
     const bx = (path[i + 1].lng - p.lng) * kx;

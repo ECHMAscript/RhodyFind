@@ -1,6 +1,7 @@
 import type { CampusLocation } from '@/data/locations';
 import type { Endpoint } from '@/lib/endpoints';
 import type { LatLng } from '@/lib/geo';
+import type { LiveFix } from '@/lib/useWatchPosition';
 
 export type CampusMapProps = {
   places: CampusLocation[];
@@ -11,15 +12,10 @@ export type CampusMapProps = {
   route?: LatLng[];
   /** Part of the route to emphasize (the current navigation step). */
   highlight?: LatLng[];
-  /** The user's live position. */
-  user?: LatLng;
-  /** The user's direction of travel in degrees (0 = north), drawn as an arrow. */
-  heading?: number;
-  /**
-   * When set, the camera stays centered on this point (live navigation) and
-   * fitTo is ignored.
-   */
-  followUser?: LatLng;
+  /** The user's live GPS fix. The map glides the dot between fixes and shows heading. */
+  userFix?: LiveFix;
+  /** Keep the camera on the user (live navigation); fitTo is ignored while true. */
+  follow?: boolean;
   /** Called when the user drags the map, so the screen can pause following. */
   onUserPan?: () => void;
   /** Points the map should frame; defaults to from/to. Pass a memoized array. */

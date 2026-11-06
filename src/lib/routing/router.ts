@@ -102,30 +102,48 @@ function reachable(g: Graph, mode: TravelMode): Uint8Array {
   return seen;
 }
 
-/** Closest network node a mode can use. A linear scan is fine for ~5,500 nodes. */
-function snap(g: Graph, mode: TravelMode, p: LatLng): number {
+// When the user is moving, a node behind them costs this many extra meters,
+// so a reroute continues forward instead of starting with a U-turn.
+const BEHIND_PENALTY_M = 35;
+
+/**
+ * Closest network node a mode can use. A linear scan is fine for ~5,500 nodes.
+ * With a heading (degrees), nodes behind the user are avoided unless they are
+ * clearly the only nearby option.
+ */
+function snap(g: Graph, mode: TravelMode, p: LatLng, heading?: number): number {
   const ok = reachable(g, mode);
-  const cosLat = Math.cos((p.lat * Math.PI) / 180);
+  const kx = 111_320 * Math.cos((p.lat * Math.PI) / 180);
+  const ky = 110_540;
+  const hx = heading === undefined ? 0 : Math.sin((heading * Math.PI) / 180);
+  const hy = heading === undefined ? 0 : Math.cos((heading * Math.PI) / 180);
   let best = -1;
-  let bestD = Infinity;
+  let bestCost = Infinity;
   for (let n = 0; n < g.nodeCount; n++) {
     if (!ok[n]) continue;
-    const dy = g.lat[n] - p.lat;
-    const dx = (g.lng[n] - p.lng) * cosLat;
-    const d = dx * dx + dy * dy;
-    if (d < bestD) {
-      bestD = d;
+    const dy = (g.lat[n] - p.lat) * ky;
+    const dx = (g.lng[n] - p.lng) * kx;
+    const d = Math.hypot(dx, dy);
+    // Behind = more than 90 degrees off the direction of travel (and not right underfoot).
+    const behind = heading !== undefined && d > 8 && dx * hx + dy * hy < 0;
+    const cost = d + (behind ? BEHIND_PENALTY_M : 0);
+    if (cost < bestCost) {
+      bestCost = cost;
       best = n;
     }
   }
   return best;
 }
 
-/** Shortest (by travel time) route between two points for a travel mode, using A*. */
-export function findRoute(from: LatLng, to: LatLng, mode: TravelMode): Route | null {
+/**
+ * Shortest (by travel time) route between two points for a travel mode, using
+ * A*. Pass the user's heading when rerouting while moving, so the route starts
+ * in the direction they're already going.
+ */
+export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { heading?: number } = {}): Route | null {
   const g = campusGraph();
   const profile = PROFILES[mode];
-  const start = snap(g, mode, from);
+  const start = snap(g, mode, from, opts.heading);
   const goal = snap(g, mode, to);
   if (start < 0 || goal < 0) return null;
 

@@ -22,6 +22,10 @@ type Props = {
   remainingMeters?: number;
   /** Live meters left in the current step. */
   stepMetersLeft?: number;
+  /** The user has reached the destination. */
+  arrived?: boolean;
+  /** A one-tap fix to offer, e.g. switching to Drive when the user is clearly in a car. */
+  suggestion?: { text: string; action: string; onPress: () => void };
   notice?: string;
 };
 
@@ -40,6 +44,8 @@ export function NavigationPanel({
   onReroute,
   remainingMeters,
   stepMetersLeft,
+  arrived,
+  suggestion,
   notice,
 }: Props) {
   const step = steps[stepIndex];
@@ -66,20 +72,31 @@ export function NavigationPanel({
         </Pressable>
       </View>
 
-      {/* Current step */}
-      <View style={styles.current}>
-        <View style={styles.currentIcon}>
-          <MaterialCommunityIcons name={MANEUVER_ICON[step.maneuver]} size={30} color={colors.white} />
+      {arrived ? (
+        <View style={[styles.current, styles.arrived]}>
+          <View style={styles.currentIcon}>
+            <MaterialCommunityIcons name="flag-checkered" size={30} color={colors.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.currentText}>You’ve arrived at {destination}</Text>
+            <Text style={styles.currentMeta}>Tap End when you’re done.</Text>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.currentText}>{step.instruction}</Text>
-          {stepLeft > 0 && (
-            <Text style={styles.currentMeta}>
-              {stepMetersLeft !== undefined ? `${formatMiles(stepLeft)} to go` : `for ${formatMiles(stepLeft)}`}
-            </Text>
-          )}
+      ) : (
+        <View style={styles.current}>
+          <View style={styles.currentIcon}>
+            <MaterialCommunityIcons name={MANEUVER_ICON[step.maneuver]} size={30} color={colors.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.currentText}>{step.instruction}</Text>
+            {stepLeft > 0 && (
+              <Text style={styles.currentMeta}>
+                {stepMetersLeft !== undefined ? `${formatMiles(stepLeft)} to go` : `for ${formatMiles(stepLeft)}`}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
+      )}
 
       <View style={styles.controls}>
         <Pressable
@@ -107,6 +124,13 @@ export function NavigationPanel({
         </Pressable>
       </View>
 
+      {suggestion && (
+        <Pressable style={styles.suggestion} onPress={suggestion.onPress} accessibilityRole="button">
+          <MaterialCommunityIcons name="car" size={18} color={colors.navy} />
+          <Text style={styles.suggestionText}>{suggestion.text}</Text>
+          <Text style={styles.suggestionLink}>{suggestion.action}</Text>
+        </Pressable>
+      )}
       {offRoute && (
         <Pressable style={styles.offRoute} onPress={onReroute}>
           <MaterialCommunityIcons name="map-marker-alert-outline" size={18} color={colors.danger} />
@@ -179,6 +203,10 @@ const styles = StyleSheet.create({
   followOn: { backgroundColor: colors.keaney, borderColor: colors.keaney },
   followText: { fontSize: 13, fontWeight: '600', color: colors.navy },
 
+  arrived: { backgroundColor: '#0E7A4B' },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: colors.keaneyTint },
+  suggestionText: { flex: 1, color: colors.text, fontSize: 14 },
+  suggestionLink: { color: colors.navy, fontWeight: '700', fontSize: 14 },
   offRoute: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.md, backgroundColor: '#FDECEC' },
   offRouteText: { flex: 1, color: colors.text, fontSize: 14 },
   offRouteLink: { color: colors.danger, fontWeight: '700', fontSize: 14 },

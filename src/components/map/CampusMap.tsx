@@ -19,12 +19,14 @@ export const CampusMap = memo(function CampusMap({
   onPlacePress,
   route,
   highlight,
-  user,
-  heading,
+  userFix,
+  follow = false,
   fitTo,
-  followUser,
   onUserPan,
 }: CampusMapProps) {
+  const user = userFix?.position;
+  const heading = userFix?.heading;
+  const followUser = follow ? user : undefined;
   const ref = useRef<MapView>(null);
   const following = useRef(false);
 
@@ -35,7 +37,8 @@ export const CampusMap = memo(function CampusMap({
       return;
     }
     const center = toCoord(followUser);
-    ref.current?.animateCamera(following.current ? { center } : { center, zoom: FOLLOW_ZOOM }, { duration: 600 });
+    // Glide for about the time until the next fix (~1 s), so the camera never stops between fixes.
+    ref.current?.animateCamera(following.current ? { center } : { center, zoom: FOLLOW_ZOOM }, { duration: 950 });
     following.current = true;
   }, [followUser]);
 
