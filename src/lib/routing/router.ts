@@ -1,6 +1,7 @@
 import { haversineMeters, type LatLng, type TravelMode } from '@/lib/geo';
 import { BIKE, CAR, CAR_BACKWARD_ONLY, CAR_FORWARD_ONLY, FOOT, campusGraph, type EdgeKind, type Graph } from './graph';
 import { MinHeap } from './MinHeap';
+import { SpatialIndex, spatialEngineReady, toXY } from '../spatial/engine';
 
 type Profile = {
   /** Whether this mode may travel the edge in the given direction (+1 A→B, -1 B→A). */
@@ -106,27 +107,82 @@ function reachable(g: Graph, mode: TravelMode): Uint8Array {
 // so a reroute continues forward instead of starting with a U-turn.
 const BEHIND_PENALTY_M = 35;
 
+// Snapping candidates fetched from the k-d tree when a heading is given.
+const SNAP_CANDIDATES = 24;
+
+// Per travel mode: a k-d tree over the network nodes that mode can use.
+const nodeIndexes = new Map<TravelMode, { index: SpatialIndex; nodes: Int32Array }>();
+
+function nodeIndex(g: Graph, mode: TravelMode) {
+  let entry = nodeIndexes.get(mode);
+  if (!entry && spatialEngineReady()) {
+    const ok = reachable(g, mode);
+    const nodes: number[] = [];
+    for (let n = 0; n < g.nodeCount; n++) if (ok[n]) nodes.push(n);
+    const xy = new Float64Array(nodes.length * 2);
+    nodes.forEach((n, i) => {
+      const [x, y] = toXY({ lat: g.lat[n], lng: g.lng[n] });
+      xy[2 * i] = x;
+      xy[2 * i + 1] = y;
+    });
+    const index = SpatialIndex.fromXY(xy);
+    if (index) nodeIndexes.set(mode, (entry = { index, nodes: Int32Array.from(nodes) }));
+  }
+  return entry;
+}
+
 /**
- * Closest network node a mode can use. A linear scan is fine for ~5,500 nodes.
- * With a heading (degrees), nodes behind the user are avoided unless they are
- * clearly the only nearby option.
+ * Snapping cost of a node: its distance, plus a penalty if it's behind a
+ * moving user (more than 90 degrees off their heading, and not right underfoot),
+ * so a reroute continues forward instead of starting with a U-turn.
+ */
+function snapCost(dx: number, dy: number, heading?: number): number {
+  const d = Math.hypot(dx, dy);
+  if (heading === undefined) return d;
+  const hx = Math.sin((heading * Math.PI) / 180);
+  const hy = Math.cos((heading * Math.PI) / 180);
+  return d + (d > 8 && dx * hx + dy * hy < 0 ? BEHIND_PENALTY_M : 0);
+}
+
+/**
+ * Closest network node a mode can use, found with the C++ k-d tree when it's
+ * loaded. With a heading, the cheapest of the nearest candidates wins; if a
+ * node beyond the candidates could still be cheaper, it falls back to the scan,
+ * so the answer is always exact.
  */
 function snap(g: Graph, mode: TravelMode, p: LatLng, heading?: number): number {
+  const entry = nodeIndex(g, mode);
+  if (entry) {
+    const [px, py] = toXY(p);
+    const near = entry.index.kNearestXY(px, py, heading === undefined ? 1 : SNAP_CANDIDATES);
+    let best = -1;
+    let bestCost = Infinity;
+    for (const { id } of near) {
+      const n = entry.nodes[id];
+      const [x, y] = toXY({ lat: g.lat[n], lng: g.lng[n] });
+      const cost = snapCost(x - px, y - py, heading);
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = n;
+      }
+    }
+    // Any node not returned is at least as far as the last candidate, and costs at least its distance.
+    const farthest = near.length ? Math.sqrt(near[near.length - 1].dist2) : Infinity;
+    if (best >= 0 && (near.length < SNAP_CANDIDATES || heading === undefined || bestCost <= farthest)) return best;
+  }
+  return snapBruteForce(g, mode, p, heading);
+}
+
+/** The baseline: check every node. */
+function snapBruteForce(g: Graph, mode: TravelMode, p: LatLng, heading?: number): number {
   const ok = reachable(g, mode);
-  const kx = 111_320 * Math.cos((p.lat * Math.PI) / 180);
-  const ky = 110_540;
-  const hx = heading === undefined ? 0 : Math.sin((heading * Math.PI) / 180);
-  const hy = heading === undefined ? 0 : Math.cos((heading * Math.PI) / 180);
+  const [px, py] = toXY(p);
   let best = -1;
   let bestCost = Infinity;
   for (let n = 0; n < g.nodeCount; n++) {
     if (!ok[n]) continue;
-    const dy = (g.lat[n] - p.lat) * ky;
-    const dx = (g.lng[n] - p.lng) * kx;
-    const d = Math.hypot(dx, dy);
-    // Behind = more than 90 degrees off the direction of travel (and not right underfoot).
-    const behind = heading !== undefined && d > 8 && dx * hx + dy * hy < 0;
-    const cost = d + (behind ? BEHIND_PENALTY_M : 0);
+    const [x, y] = toXY({ lat: g.lat[n], lng: g.lng[n] });
+    const cost = snapCost(x - px, y - py, heading);
     if (cost < bestCost) {
       bestCost = cost;
       best = n;

@@ -26,6 +26,22 @@ npx expo start           # then scan the QR code with Expo Go for the phone app
 npm run build:graph      # re-download campus paths from OpenStreetMap
 ```
 
+## C++ k-d tree
+
+Nearest-place search and route snapping use a 2-D k-d tree written in C++
+(`cpp/kdtree.hpp`), compiled to WebAssembly for the web app. Brute force is the
+baseline it is measured against; the app falls back to it where WebAssembly
+isn't available.
+
+```bash
+npm run test:cpp     # k-d tree vs brute force: results must be identical
+npm run bench:cpp    # 100 / 1k / 10k / 100k points -> benchmarks/results.csv
+npm run build:wasm   # needs Emscripten (emcc) -> src/wasm/kdtree.js
+```
+
+The **Performance** tab charts the recorded native results and can run the same
+benchmark live in the browser.
+
 ## Layout
 
 ```

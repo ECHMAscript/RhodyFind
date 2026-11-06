@@ -28,6 +28,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx tsc --noEmit
+      # The C++ k-d tree must match brute force before anything ships.
+      - run: make -C cpp test
       # Exports to dist/ under the /RhodyFind base URL (app.json) and copies
       # index.html to 404.html so links like /RhodyFind/map open the app.
       - run: npm run build:pages

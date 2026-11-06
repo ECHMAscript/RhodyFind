@@ -2,6 +2,10 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { loadSpatialEngine } from '@/lib/spatial/engine';
+
+// Start loading the C++ k-d tree (WebAssembly) right away; searches use it once it's ready.
+loadSpatialEngine();
 
 export default function RootLayout() {
   // The web map draws its pins with this icon font, so load it before rendering.
@@ -14,6 +18,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ title: 'RhodyFind' }} />
         <Stack.Screen name="map" options={{ title: 'Map · RhodyFind' }} />
+        <Stack.Screen name="performance" options={{ title: 'Performance · RhodyFind' }} />
       </Stack>
     </>
   );

@@ -16,6 +16,7 @@ export function Logo({ size = 24 }: { size?: number }) {
 const NAV = [
   { href: '/', label: 'Home' },
   { href: '/map', label: 'Map' },
+  { href: '/performance', label: 'Performance' },
 ] as const;
 
 // Memoized: the map screen re-renders on every GPS fix, the header never needs to.
@@ -29,16 +30,16 @@ export const Header = memo(function Header() {
       <View style={[styles.bar, compact && styles.barCompact]}>
         <Link href="/" asChild>
           <Pressable accessibilityLabel="RhodyFind home">
-            <Logo size={compact ? 22 : 26} />
+            <Logo size={compact ? 20 : 26} />
           </Pressable>
         </Link>
-        <View style={styles.nav}>
+        <View style={[styles.nav, compact && styles.navCompact]}>
           {NAV.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
             return (
               <Link key={item.href} href={item.href} asChild>
                 <Pressable style={styles.navItem}>
-                  <Text style={[styles.navText, active && styles.navTextActive]}>{item.label}</Text>
+                  <Text style={[styles.navText, compact && styles.navTextCompact, active && styles.navTextActive]}>{item.label}</Text>
                   <View style={[styles.underline, active && styles.underlineActive]} />
                 </Pressable>
               </Link>
@@ -65,8 +66,10 @@ const styles = StyleSheet.create({
   barCompact: { height: 56, paddingHorizontal: 16 },
   logo: { fontWeight: '900', fontStyle: 'italic', letterSpacing: -0.5 },
   nav: { flexDirection: 'row', gap: 24 },
+  navCompact: { gap: 12 },
   navItem: { paddingVertical: 6, alignItems: 'center' },
   navText: { fontSize: 15, fontWeight: '500', color: colors.textMuted },
+  navTextCompact: { fontSize: 14 },
   navTextActive: { color: colors.navy, fontWeight: '700' },
   underline: { marginTop: 4, height: 3, width: '100%', borderRadius: 2, backgroundColor: 'transparent' },
   underlineActive: { backgroundColor: colors.navy },

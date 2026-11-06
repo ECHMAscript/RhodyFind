@@ -1,0 +1,13 @@
+{
+  "source": "Native C++ (clang 16.0.0 (clang-1600.0.26.6)), 1000 queries x 5 runs, median",
+  "rows": [
+    {"n": 100, "k": 1, "buildMs": 0.0127, "kdQueryUs": 1.0746, "bfQueryUs": 1.6527},
+    {"n": 100, "k": 5, "buildMs": 0.0127, "kdQueryUs": 5.0481, "bfQueryUs": 5.1699},
+    {"n": 1000, "k": 1, "buildMs": 0.3270, "kdQueryUs": 1.8808, "bfQueryUs": 18.2560},
+    {"n": 1000, "k": 5, "buildMs": 0.3270, "kdQueryUs": 5.7446, "bfQueryUs": 20.4490},
+    {"n": 10000, "k": 1, "buildMs": 8.2921, "kdQueryUs": 2.1366, "bfQueryUs": 140.5802},
+    {"n": 10000, "k": 5, "buildMs": 8.2921, "kdQueryUs": 6.5474, "bfQueryUs": 143.4382},
+    {"n": 100000, "k": 1, "buildMs": 52.9839, "kdQueryUs": 3.6127, "bfQueryUs": 1382.6946},
+    {"n": 100000, "k": 5, "buildMs": 52.9839, "kdQueryUs": 8.6099, "bfQueryUs": 1491.7136}
+  ]
+}
