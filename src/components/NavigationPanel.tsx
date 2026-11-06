@@ -27,6 +27,8 @@ type Props = {
   /** A one-tap fix to offer, e.g. switching to Drive when the user is clearly in a car. */
   suggestion?: { text: string; action: string; onPress: () => void };
   notice?: string;
+  /** Height of the top part (destination, current step, alerts): what a slid-down sheet shows. */
+  onPeekLayout?: (height: number) => void;
 };
 
 /** Turn-by-turn directions shown after "Start Route". */
@@ -47,6 +49,7 @@ export function NavigationPanel({
   arrived,
   suggestion,
   notice,
+  onPeekLayout,
 }: Props) {
   const step = steps[stepIndex];
   const modeMeta = TRAVEL_MODES.find((m) => m.id === mode)!;
@@ -56,47 +59,66 @@ export function NavigationPanel({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.eyebrow}>Directions to</Text>
-          <Text style={styles.title} numberOfLines={1}>{destination}</Text>
-          <View style={styles.summary}>
-            <MaterialCommunityIcons name={modeMeta.icon} size={14} color={colors.textMuted} />
-            <Text style={styles.summaryText}>
-              {formatMiles(remaining)} · {remainingMin} min · arrive {arrivalTime(remainingMin)}
-            </Text>
-          </View>
-        </View>
-        <Pressable style={styles.end} onPress={onEnd} accessibilityRole="button">
-          <Text style={styles.endText}>End</Text>
-        </Pressable>
-      </View>
-
-      {arrived ? (
-        <View style={[styles.current, styles.arrived]}>
-          <View style={styles.currentIcon}>
-            <MaterialCommunityIcons name="flag-checkered" size={30} color={colors.white} />
-          </View>
+      {/* The part a slid-down sheet keeps in view. */}
+      <View style={styles.wrap} onLayout={onPeekLayout && ((e) => onPeekLayout(Math.ceil(e.nativeEvent.layout.height)))}>
+        <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.currentText}>You’ve arrived at {destination}</Text>
-            <Text style={styles.currentMeta}>Tap End when you’re done.</Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.current}>
-          <View style={styles.currentIcon}>
-            <MaterialCommunityIcons name={MANEUVER_ICON[step.maneuver]} size={30} color={colors.white} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.currentText}>{step.instruction}</Text>
-            {stepLeft > 0 && (
-              <Text style={styles.currentMeta}>
-                {stepMetersLeft !== undefined ? `${formatMiles(stepLeft)} to go` : `for ${formatMiles(stepLeft)}`}
+            <Text style={styles.eyebrow}>Directions to</Text>
+            <Text style={styles.title} numberOfLines={1}>{destination}</Text>
+            <View style={styles.summary}>
+              <MaterialCommunityIcons name={modeMeta.icon} size={14} color={colors.textMuted} />
+              <Text style={styles.summaryText}>
+                {formatMiles(remaining)} · {remainingMin} min · arrive {arrivalTime(remainingMin)}
               </Text>
-            )}
+            </View>
           </View>
+          <Pressable style={styles.end} onPress={onEnd} accessibilityRole="button">
+            <Text style={styles.endText}>End</Text>
+          </Pressable>
         </View>
-      )}
+
+        {arrived ? (
+          <View style={[styles.current, styles.arrived]}>
+            <View style={styles.currentIcon}>
+              <MaterialCommunityIcons name="flag-checkered" size={30} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.currentText}>You’ve arrived at {destination}</Text>
+              <Text style={styles.currentMeta}>Tap End when you’re done.</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.current}>
+            <View style={styles.currentIcon}>
+              <MaterialCommunityIcons name={MANEUVER_ICON[step.maneuver]} size={30} color={colors.white} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.currentText}>{step.instruction}</Text>
+              {stepLeft > 0 && (
+                <Text style={styles.currentMeta}>
+                  {stepMetersLeft !== undefined ? `${formatMiles(stepLeft)} to go` : `for ${formatMiles(stepLeft)}`}
+                </Text>
+              )}
+            </View>
+          </View>
+        )}
+
+        {suggestion && (
+          <Pressable style={styles.suggestion} onPress={suggestion.onPress} accessibilityRole="button">
+            <MaterialCommunityIcons name="car" size={18} color={colors.navy} />
+            <Text style={styles.suggestionText}>{suggestion.text}</Text>
+            <Text style={styles.suggestionLink}>{suggestion.action}</Text>
+          </Pressable>
+        )}
+        {offRoute && (
+          <Pressable style={styles.offRoute} onPress={onReroute}>
+            <MaterialCommunityIcons name="map-marker-alert-outline" size={18} color={colors.danger} />
+            <Text style={styles.offRouteText}>Off route, finding a new way…</Text>
+            <Text style={styles.offRouteLink}>Reroute now</Text>
+          </Pressable>
+        )}
+        {notice && <Text style={styles.notice}>{notice}</Text>}
+      </View>
 
       <View style={styles.controls}>
         <Pressable
@@ -124,21 +146,6 @@ export function NavigationPanel({
         </Pressable>
       </View>
 
-      {suggestion && (
-        <Pressable style={styles.suggestion} onPress={suggestion.onPress} accessibilityRole="button">
-          <MaterialCommunityIcons name="car" size={18} color={colors.navy} />
-          <Text style={styles.suggestionText}>{suggestion.text}</Text>
-          <Text style={styles.suggestionLink}>{suggestion.action}</Text>
-        </Pressable>
-      )}
-      {offRoute && (
-        <Pressable style={styles.offRoute} onPress={onReroute}>
-          <MaterialCommunityIcons name="map-marker-alert-outline" size={18} color={colors.danger} />
-          <Text style={styles.offRouteText}>Off route, finding a new way…</Text>
-          <Text style={styles.offRouteLink}>Reroute now</Text>
-        </Pressable>
-      )}
-      {notice && <Text style={styles.notice}>{notice}</Text>}
 
       <StepList steps={steps} stepIndex={stepIndex} onStepChange={onStepChange} />
     </View>

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
+import { BottomSheet, SHEET_HANDLE_HEIGHT, sheetPeekHeight } from '@/components/BottomSheet';
 import { Header } from '@/components/Header';
 import { LocationField } from '@/components/LocationField';
 import { NavigationPanel } from '@/components/NavigationPanel';
@@ -224,23 +225,23 @@ export default function MapScreen() {
   const live = navigating && following && onRoute && !!track;
   // While tracking, draw only the route from the user's current segment on.
   // Cutting at a vertex (not at the 1-per-second GPS point) keeps the line
-  // still under the smoothly gliding dot instead of jumping each second.
+  // still under the smoothly gliding dot instead of jumping each second, and
+  // the line only changes (and redraws) when the user passes a vertex.
+  const cutAt = live && track ? Math.max(track.segment, progressSegment) : -1;
   const routeShown = useMemo(() => {
     if (!activeRoute) return undefined;
-    if (!live || !track) return activeRoute.coords;
-    return activeRoute.coords.slice(Math.max(track.segment, progressSegment));
-  }, [activeRoute, live, track, progressSegment]);
+    return cutAt < 0 ? activeRoute.coords : activeRoute.coords.slice(cutAt);
+  }, [activeRoute, cutAt]);
 
   const step = navigating ? steps[stepIndex] : undefined;
   const highlight = useMemo(() => {
     if (!step || !activeRoute || step.endIndex <= step.startIndex) return undefined;
     // If the user is partway through this step, start the highlight at their segment.
-    const at = track ? Math.max(track.segment, progressSegment) : -1;
-    if (live && at >= step.startIndex && at < step.endIndex) {
-      return activeRoute.coords.slice(at, step.endIndex + 1);
+    if (cutAt >= step.startIndex && cutAt < step.endIndex) {
+      return activeRoute.coords.slice(cutAt, step.endIndex + 1);
     }
     return activeRoute.coords.slice(step.startIndex, step.endIndex + 1);
-  }, [step, activeRoute, live, track, progressSegment]);
+  }, [step, activeRoute, cutAt]);
   const stepMetersLeft = live && step ? metersFromUserTo(step.endIndex) : undefined;
 
   const follow = navigating && following && !cameraFree && !!user && !farAway;
@@ -256,8 +257,22 @@ export default function MapScreen() {
     if (coords) setFrom(currentPosition(coords));
   };
 
+  // Phones: during navigation the directions are a sheet over a full-height map.
+  const [sheetUp, setSheetUp] = useState(false);
+  const [peekContentHeight, setPeekContentHeight] = useState(150);
+  const [bodyHeight, setBodyHeight] = useState(0);
+  const sheet = mobile && navigating;
+  // On a short screen (a phone held sideways) the slid-down sheet shows only
+  // the top of the panel, so it never covers more than about half the map.
+  const peekShown = bodyHeight
+    ? Math.min(peekContentHeight, Math.max(64, bodyHeight * 0.45 - SHEET_HANDLE_HEIGHT))
+    : peekContentHeight;
+  const peekHeight = sheetPeekHeight(peekShown);
+
   const startRoute = () => {
+    setSheetUp(false);
     setStepSel({ route, index: 0 });
+    setProgress({ route: null, segment: 0 }); // restarting the same route starts from the beginning
     setFollowing(true);
     setCameraFree(false);
     setRerouted(null);
@@ -382,41 +397,43 @@ export default function MapScreen() {
     </>
   );
 
+  const navPanel =
+    navigating && activeRoute && to && steps.length ? (
+      <NavigationPanel
+        destination={to.name}
+        mode={mode}
+        route={activeRoute}
+        steps={steps}
+        stepIndex={stepIndex}
+        onStepChange={setStepIndex}
+        onEnd={endRoute}
+        following={following}
+        onToggleFollow={() => {
+          setFollowing((f) => !f);
+          setCameraFree(false);
+        }}
+        offRoute={offRoute}
+        onReroute={rerouteNow}
+        remainingMeters={remainingMeters}
+        stepMetersLeft={stepMetersLeft}
+        arrived={arrived}
+        suggestion={
+          drivingHint && routes?.drive
+            ? { text: 'Looks like you’re driving.', action: 'Switch to Drive', onPress: () => switchMode('drive') }
+            : undefined
+        }
+        notice={notice}
+        onPeekLayout={sheet ? setPeekContentHeight : undefined}
+      />
+    ) : null;
+
   const panel = (
     <ScrollView
       style={[styles.panel, mobile && styles.panelMobile]}
       contentContainerStyle={styles.panelContent}
       keyboardShouldPersistTaps="handled"
     >
-      {navigating && activeRoute && to && steps.length ? (
-        <NavigationPanel
-          destination={to.name}
-          mode={mode}
-          route={activeRoute}
-          steps={steps}
-          stepIndex={stepIndex}
-          onStepChange={setStepIndex}
-          onEnd={endRoute}
-          following={following}
-          onToggleFollow={() => {
-            setFollowing((f) => !f);
-            setCameraFree(false);
-          }}
-          offRoute={offRoute}
-          onReroute={rerouteNow}
-          remainingMeters={remainingMeters}
-          stepMetersLeft={stepMetersLeft}
-          arrived={arrived}
-          suggestion={
-            drivingHint && routes?.drive
-              ? { text: 'Looks like you’re driving.', action: 'Switch to Drive', onPress: () => switchMode('drive') }
-              : undefined
-          }
-          notice={notice}
-        />
-      ) : (
-        planner
-      )}
+      {navPanel ?? planner}
     </ScrollView>
   );
 
@@ -432,11 +449,16 @@ export default function MapScreen() {
       follow={follow}
       fitTo={fitTo}
       onUserPan={onUserPan}
+      bottomInset={sheet ? peekHeight : 0}
     />
   );
   // After the user drags the map mid-navigation, offer a way back to following.
   const recenter = navigating && following && cameraFree && user && !farAway && (
-    <Pressable style={styles.recenter} onPress={() => setCameraFree(false)} accessibilityRole="button">
+    <Pressable
+      style={[styles.recenter, sheet && { bottom: peekHeight + 12 }]}
+      onPress={() => setCameraFree(false)}
+      accessibilityRole="button"
+    >
       <MaterialCommunityIcons name="crosshairs-gps" size={18} color={colors.white} />
       <Text style={styles.recenterText}>Recenter</Text>
     </Pressable>
@@ -445,8 +467,26 @@ export default function MapScreen() {
   return (
     <View style={styles.screen}>
       <Header />
-      <View style={[styles.body, mobile && styles.bodyMobile]}>
-        {mobile ? (
+      <View style={[styles.body, mobile && styles.bodyMobile]} onLayout={(e) => setBodyHeight(e.nativeEvent.layout.height)}>
+        {sheet ? (
+          <>
+            {/* The map fills the screen behind the sheet and never changes size
+                (a resize mid-zoom would redraw the route off the road); the
+                camera keeps the user centered in the part above the sheet. */}
+            <View style={StyleSheet.absoluteFill}>
+              {map}
+              {recenter}
+            </View>
+            <BottomSheet
+              peekContentHeight={peekShown}
+              maxHeight={Math.max(bodyHeight * 0.75, 0)}
+              expanded={sheetUp}
+              onExpandedChange={setSheetUp}
+            >
+              {navPanel}
+            </BottomSheet>
+          </>
+        ) : mobile ? (
           <>
             <View style={styles.mapMobile}>
               {map}

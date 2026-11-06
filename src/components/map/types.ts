@@ -20,4 +20,9 @@ export type CampusMapProps = {
   onUserPan?: () => void;
   /** Points the map should frame; defaults to from/to. Pass a memoized array. */
   fitTo?: LatLng[];
+  /**
+   * Pixels at the bottom of the map covered by other UI (the directions sheet
+   * on phones). The camera keeps the user and fitted routes above it.
+   */
+  bottomInset?: number;
 };

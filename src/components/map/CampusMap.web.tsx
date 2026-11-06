@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, Marker, Polyline, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
+import { MapContainer, Marker, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -76,18 +76,57 @@ const PlaceMarker = memo(function PlaceMarker({
 
 const toTuple = (p: LatLng): L.LatLngTuple => [p.lat, p.lng];
 
-function FitBounds({ points }: { points: L.LatLngTuple[] }) {
+function FitBounds({ points, bottomInset }: { points: L.LatLngTuple[]; bottomInset: number }) {
   const map = useMap();
+  // Read when fitting, so a changing inset doesn't refit the map by itself.
+  const inset = useRef(bottomInset);
   useEffect(() => {
-    if (points.length > 1) map.fitBounds(points, { padding: [60, 60], maxZoom: 18, animate: true });
-    else if (points.length === 1) map.setView(points[0], 17, { animate: true });
+    inset.current = bottomInset;
+  }, [bottomInset]);
+  useEffect(() => {
+    if (!points.length) return;
+    map.fitBounds(L.latLngBounds(points), {
+      paddingTopLeft: [60, 60],
+      paddingBottomRight: [60, 60 + inset.current],
+      maxZoom: points.length > 1 ? 18 : 17,
+      animate: true,
+    });
   }, [map, points]);
-  // The map's container can resize (e.g. switching to the mobile layout).
+  // The map's container can resize (the mobile layout, or a phone browser's
+  // toolbar sliding away). Resizing redraws the route, so never mid-zoom:
+  // that would draw it at the in-between zoom, off the road.
   useEffect(() => {
-    const ro = new ResizeObserver(() => map.invalidateSize());
+    let zooming = false;
+    let resized = false;
+    const onZoomStart = () => {
+      zooming = true;
+    };
+    const onZoomEnd = () => {
+      zooming = false;
+      if (resized) {
+        resized = false;
+        map.invalidateSize();
+      }
+    };
+    map.on('zoomstart', onZoomStart);
+    map.on('zoomend', onZoomEnd);
+    const ro = new ResizeObserver(() => {
+      if (zooming) resized = true;
+      else map.invalidateSize();
+    });
     ro.observe(map.getContainer());
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      map.off('zoomstart', onZoomStart);
+      map.off('zoomend', onZoomEnd);
+    };
   }, [map]);
+  // Keep the zoom buttons and map credits above whatever covers the bottom.
+  useEffect(() => {
+    map.getContainer().querySelectorAll<HTMLElement>('.leaflet-bottom').forEach((el) => {
+      el.style.bottom = `${bottomInset}px`;
+    });
+  }, [map, bottomInset]);
   return null;
 }
 
@@ -102,7 +141,17 @@ const NO_POINTS: L.LatLngTuple[] = [];
  * The first followed frame zooms in; after that the user's zoom is kept.
  * Dragging the map hands the camera back to the user.
  */
-function LiveUser({ fix, follow, onUserPan }: { fix: LiveFix; follow: boolean; onUserPan?: () => void }) {
+function LiveUser({
+  fix,
+  follow,
+  onUserPan,
+  bottomInset,
+}: {
+  fix: LiveFix;
+  follow: boolean;
+  onUserPan?: () => void;
+  bottomInset: number;
+}) {
   const map = useMap();
   const markerRef = useRef<L.Marker>(null);
   // Fixed initial position: the animation loop owns the marker's position after that.
@@ -115,6 +164,10 @@ function LiveUser({ fix, follow, onUserPan }: { fix: LiveFix; follow: boolean; o
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
+  const insetRef = useRef(bottomInset);
+  useEffect(() => {
+    insetRef.current = bottomInset;
+  }, [bottomInset]);
 
   // Rotate the heading arrow in place instead of building a new icon.
   useEffect(() => {
@@ -130,6 +183,11 @@ function LiveUser({ fix, follow, onUserPan }: { fix: LiveFix; follow: boolean; o
     let last = performance.now();
     let zooming = false;
     let zoomedIn = false;
+    let inset = insetRef.current; // eases toward insetRef so the camera never jumps
+    // The camera's center: half the covered strip below the user, so the
+    // user sits in the middle of the part of the map that can be seen.
+    const cameraCenter = (ll: L.LatLngTuple, zoom: number) =>
+      inset ? map.unproject(map.project(ll, zoom).add([0, inset / 2]), zoom) : L.latLng(ll);
     const onZoomStart = () => {
       zooming = true;
     };
@@ -148,15 +206,18 @@ function LiveUser({ fix, follow, onUserPan }: { fix: LiveFix; follow: boolean; o
       shown = next;
       const ll: L.LatLngTuple = [next.lat, next.lng];
       if (moved) markerRef.current?.setLatLng(ll);
+      const insetMoved = Math.abs(insetRef.current - inset) > 0.5;
+      inset = insetMoved ? inset + (insetRef.current - inset) * Math.min(1, frameMs / 150) : insetRef.current;
       if (!followRef.current) {
         zoomedIn = false;
       } else if (!zooming) {
         if (!zoomedIn) {
           zoomedIn = true;
-          map.setView(ll, Math.max(map.getZoom(), FOLLOW_ZOOM), { animate: false });
-        } else if (moved) {
+          const zoom = Math.max(map.getZoom(), FOLLOW_ZOOM);
+          map.setView(cameraCenter(ll, zoom), zoom, { animate: false });
+        } else if (moved || insetMoved) {
           // A plain pan: no animation of its own, no re-projection of the layers.
-          map.panTo(ll, { animate: false, noMoveStart: true });
+          map.panTo(cameraCenter(ll, map.getZoom()), { animate: false, noMoveStart: true });
         }
       }
       raf = requestAnimationFrame(frame);
@@ -181,6 +242,55 @@ function LiveUser({ fix, follow, onUserPan }: { fix: LiveFix; follow: boolean; o
   return <Marker ref={markerRef} position={initial} icon={USER_ICON} zIndexOffset={2000} interactive={false} />;
 }
 
+
+/**
+ * A route line that never redraws mid-zoom. While a zoom (a pinch, or an
+ * animated zoom) is in progress Leaflet stretches the drawn line with a CSS
+ * transform; redrawing it then (a new GPS fix trims the route) draws it at the
+ * in-between zoom and stretches it again, so it slides off the road until the
+ * zoom ends. New points that arrive mid-zoom are applied when the zoom ends.
+ */
+function RouteLine({ positions, pathOptions }: { positions: L.LatLngTuple[]; pathOptions: L.PathOptions }) {
+  const map = useMap();
+  const [line] = useState(() => L.polyline([], pathOptions));
+  const zooming = useRef(false);
+  const pending = useRef<L.LatLngTuple[] | null>(null);
+
+  useEffect(() => {
+    line.addTo(map);
+    const onZoomStart = () => {
+      zooming.current = true;
+    };
+    const onZoomEnd = () => {
+      zooming.current = false;
+      if (pending.current) {
+        line.setLatLngs(pending.current);
+        pending.current = null;
+      }
+    };
+    map.on('zoomstart', onZoomStart);
+    map.on('zoomend', onZoomEnd);
+    return () => {
+      map.off('zoomstart', onZoomStart);
+      map.off('zoomend', onZoomEnd);
+      line.remove();
+    };
+  }, [map, line]);
+
+  useEffect(() => {
+    line.setStyle(pathOptions);
+  }, [line, pathOptions]);
+
+  useEffect(() => {
+    if (zooming.current) pending.current = positions;
+    else {
+      pending.current = null;
+      line.setLatLngs(positions);
+    }
+  }, [line, positions]);
+
+  return null;
+}
 
 const FROM_PIN = pinIcon(colors.keaney);
 const TO_PIN = pinIcon(colors.danger);
@@ -211,6 +321,7 @@ export const CampusMap = memo(function CampusMap({
   follow = false,
   fitTo,
   onUserPan,
+  bottomInset = 0,
 }: CampusMapProps) {
   const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
   const toPos = useMemo<L.LatLngTuple | undefined>(() => to && [to.lat, to.lng], [to?.lat, to?.lng]);
@@ -223,12 +334,16 @@ export const CampusMap = memo(function CampusMap({
     () => (fitTo ? fitTo.map(toTuple) : ([fromPos, toPos].filter(Boolean) as L.LatLngTuple[])),
     [fitTo, fromPos, toPos],
   );
+  // Lines are drawn a full screen beyond each edge (Leaflet's default is 10%),
+  // so zooming out doesn't show the route cut off at the old screen edge.
+  const [renderer] = useState(() => L.svg({ padding: 1 }));
 
   return (
     <MapContainer
       center={[URI_CENTER.lat, URI_CENTER.lng]}
       zoom={16}
       zoomControl={false}
+      renderer={renderer}
       style={{ width: '100%', height: '100%' }}
     >
       <TileLayer
@@ -237,17 +352,17 @@ export const CampusMap = memo(function CampusMap({
         maxZoom={19}
       />
       <ZoomControl position="bottomright" />
-      <FitBounds points={follow && userFix ? NO_POINTS : frame} />
+      <FitBounds points={follow && userFix ? NO_POINTS : frame} bottomInset={bottomInset} />
 
       {places.map((p) => (
         <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
       ))}
 
-      {path && <Polyline positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} />}
-      {highlightPath && <Polyline positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} />}
+      {path && <RouteLine positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} />}
+      {highlightPath && <RouteLine positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} />}
       {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
       {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}
-      {userFix && <LiveUser fix={userFix} follow={follow} onUserPan={onUserPan} />}
+      {userFix && <LiveUser fix={userFix} follow={follow} onUserPan={onUserPan} bottomInset={bottomInset} />}
     </MapContainer>
   );
 });

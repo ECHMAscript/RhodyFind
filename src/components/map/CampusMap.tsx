@@ -23,6 +23,7 @@ export const CampusMap = memo(function CampusMap({
   follow = false,
   fitTo,
   onUserPan,
+  bottomInset = 0,
 }: CampusMapProps) {
   const user = userFix?.position;
   const heading = userFix?.heading;
@@ -60,6 +61,9 @@ export const CampusMap = memo(function CampusMap({
 
   return (
     <MapView
+      // Covered strip at the bottom (the directions sheet): the map centers and
+      // fits within the part above it.
+      mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: 0 }}
       ref={ref}
       style={StyleSheet.absoluteFill}
       initialRegion={{ latitude: URI_CENTER.lat, longitude: URI_CENTER.lng, latitudeDelta: 0.012, longitudeDelta: 0.012 }}
