@@ -12,6 +12,7 @@ import { currentPosition, encodeEndpoint, fromLocation, type Endpoint } from '@/
 import { formatMiles, TRAVEL_MODES, type TravelMode } from '@/lib/geo';
 import { findNearestByRoute } from '@/lib/nearestByRoute';
 import { findRoute, type Route } from '@/lib/routing/router';
+import { offCampusDistance } from '@/lib/campus';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
@@ -67,9 +68,18 @@ export default function Home() {
 
   // The C++ k-d tree picks the straight-line nearest candidates, then A* over
   // the campus paths ranks them by real travel time (lib/nearestByRoute.ts).
+  // "My location" far from campus: nothing nearby to show or route to.
+  const awayMeters = useMemo(() => offCampusDistance(origin), [origin]);
+  // A destination picked while off campus, tagged with the origin it was picked from.
+  const [blocked, setBlocked] = useState<{ origin: Endpoint; name: string }>();
+  const blockedName = blocked && blocked.origin === origin && awayMeters !== undefined ? blocked.name : undefined;
+
   const nearest = useMemo(
-    () => (origin ? findNearestByRoute(origin, { category, k: 4, mode, excludeId: origin.id }) : []),
-    [origin, category, mode],
+    () =>
+      origin && awayMeters === undefined
+        ? findNearestByRoute(origin, { category, k: 4, mode, excludeId: origin.id })
+        : [],
+    [origin, awayMeters, category, mode],
   );
   const closest = nearest[0];
   // Travel time to the closest place by every mode, for the mode tiles.
@@ -154,12 +164,25 @@ export default function Home() {
                 <LocationField
                   placeholder="Where are you going on campus?"
                   pinColor={colors.danger}
-                  onSelect={(l) => openMap(origin, fromLocation(l), mode)}
+                  onSelect={(l) =>
+                    awayMeters !== undefined && origin
+                      ? setBlocked({ origin, name: l.name })
+                      : openMap(origin, fromLocation(l), mode)
+                  }
                   zIndex={2}
                 />
               </View>
             </View>
             {geo.status === 'error' && <Text style={styles.error}>{geo.message}</Text>}
+            {blockedName && awayMeters !== undefined && (
+              <View style={styles.offCampusNote} accessibilityRole="alert">
+                <MaterialCommunityIcons name="map-marker-off-outline" size={18} color={colors.navy} />
+                <Text style={styles.offCampusNoteText}>
+                  You’re not on campus (about {formatMiles(awayMeters)} away), so we can’t give directions to{' '}
+                  {blockedName} from your location. Choose a campus building as your starting point instead.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* See what's closest to you */}
@@ -207,7 +230,20 @@ export default function Home() {
 
           {/* Closest result + travel times */}
           <View style={[styles.card, styles.routeCard, mobile && styles.routeCardMobile]}>
-            {closest ? (
+            {awayMeters !== undefined ? (
+              <View style={styles.routeInfo} accessibilityRole="alert">
+                <View style={[styles.thumb, styles.thumbIcon, { backgroundColor: colors.keaneyTint }]}>
+                  <MaterialCommunityIcons name="map-marker-off-outline" size={28} color={colors.navy} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.routeTitle}>You’re not on campus</Text>
+                  <Text style={styles.routeMeta}>
+                    You’re about {formatMiles(awayMeters)} from URI. Closest {label} will show up once you’re on
+                    campus, or pick a campus building as your starting point.
+                  </Text>
+                </View>
+              </View>
+            ) : closest ? (
               <>
                 <Pressable style={styles.routeInfo} onPress={() => openMap(origin, fromLocation(closest.location), mode)}>
                   {photo ? (
@@ -347,6 +383,8 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   swap: { width: 40, height: 40, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.keaneyTint },
   error: { marginTop: 10, color: colors.danger, fontSize: 13 },
+  offCampusNote: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: 12, borderRadius: radius.md, backgroundColor: colors.keaneyTint },
+  offCampusNoteText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.navy },
 
   closestCard: { flexDirection: 'row', alignItems: 'center', gap: 20, borderRadius: radius.xl, padding: 18 },
   closestCardMobile: { flexDirection: 'column', alignItems: 'stretch', gap: 12, padding: 14 },

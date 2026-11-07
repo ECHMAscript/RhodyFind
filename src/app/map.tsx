@@ -24,6 +24,7 @@ import {
 import { buildSteps } from '@/lib/routing/directions';
 import { findRoute, type Route } from '@/lib/routing/router';
 import { findNearest } from '@/lib/search';
+import { offCampusDistance } from '@/lib/campus';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
 import { breakpoints, colors, radius, shadow } from '@/theme';
@@ -75,13 +76,16 @@ export default function MapScreen() {
     router.setParams({ to: p.id });
   }, []);
 
+  // "My location" far from campus: no directions from there.
+  const fromAway = useMemo(() => offCampusDistance(from), [from]);
+
   // One route per travel mode, so every tile shows its real travel time.
   const routes = useMemo(() => {
-    if (!from || !to) return undefined;
+    if (!from || !to || fromAway !== undefined) return undefined;
     const r = {} as Record<TravelMode, Route | null>;
     for (const m of TRAVEL_MODES) r[m.id] = findRoute(from, to, m.id);
     return r;
-  }, [from, to]);
+  }, [from, to, fromAway]);
   const route = routes?.[mode] ?? null;
   // The place a "Learn more" page is about: the destination, or the building
   // a destination restroom or printer is in.
@@ -364,7 +368,15 @@ export default function MapScreen() {
         </Pressable>
       )}
 
-      {routes ? (
+      {fromAway !== undefined ? (
+        <View style={styles.hint} accessibilityRole="alert">
+          <MaterialCommunityIcons name="map-marker-off-outline" size={18} color={colors.navy} />
+          <Text style={styles.hintText}>
+            You’re not on campus (about {formatMiles(fromAway)} away), so we can’t give directions from your location
+            {to ? ` to ${to.name}` : ''}. Choose a campus building as your starting point instead.
+          </Text>
+        </View>
+      ) : routes ? (
         <>
           <Text style={styles.section}>Travel Options</Text>
           <TravelModes minutes={(m) => routes[m]?.minutes} selected={mode} onSelect={setMode} compact />
