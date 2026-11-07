@@ -60,6 +60,8 @@ export type Route = {
   networkEnd: number;
   meters: number;
   minutes: number;
+  /** Unrounded travel time, including any fixed overhead (for ranking). */
+  seconds: number;
 };
 
 // Nodes reachable by a mode from the main part of the network. Small islands
@@ -267,5 +269,6 @@ export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { he
     networkEnd: coords.length - 2,
     meters: networkMeters + connectorMeters,
     minutes: Math.max(1, Math.round(seconds / 60 + profile.overheadMin)),
+    seconds: seconds + profile.overheadMin * 60,
   };
 }

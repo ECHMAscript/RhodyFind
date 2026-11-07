@@ -9,8 +9,9 @@ import { TravelModes } from '@/components/TravelModes';
 import { CATEGORY_META, QUICK_CATEGORIES, type Category, type IconName } from '@/data/locations';
 import { PHOTOS, type Photo } from '@/data/photos';
 import { currentPosition, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
-import { formatMiles, travelMinutes, type TravelMode } from '@/lib/geo';
-import { findNearest } from '@/lib/search';
+import { formatMiles, TRAVEL_MODES, type TravelMode } from '@/lib/geo';
+import { findNearestByRoute } from '@/lib/nearestByRoute';
+import { findRoute, type Route } from '@/lib/routing/router';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
@@ -48,6 +49,13 @@ const AROUND_CAMPUS: { id: string; name: string; caption: string; photo: Photo }
   { id: 'memorial-union', name: 'Memorial Union', caption: 'Food, the campus store and more', photo: PHOTOS.memorialUnion },
 ];
 
+const MODE_WORD: Record<TravelMode, string> = { walk: 'walk', bike: 'bike ride', skate: 'skate', shuttle: 'by shuttle', drive: 'drive' };
+
+/** "3 min walk (0.1 mi)", from the real route. */
+function tripText(route: Route | null, mode: TravelMode) {
+  return route ? `${route.minutes} min ${MODE_WORD[mode]} (${formatMiles(route.meters)})` : `No ${MODE_WORD[mode]} route`;
+}
+
 export default function Home() {
   const { width } = useWindowDimensions();
   const mobile = width < breakpoints.tablet;
@@ -57,12 +65,22 @@ export default function Home() {
   const [mode, setMode] = useState<TravelMode>('walk');
   const { state: geo, locate } = useCurrentLocation();
 
-  // The C++ k-d tree (lib/search.ts) answers this for the chosen category.
+  // The C++ k-d tree picks the straight-line nearest candidates, then A* over
+  // the campus paths ranks them by real travel time (lib/nearestByRoute.ts).
   const nearest = useMemo(
-    () => (origin ? findNearest(origin, { category, k: 4, excludeId: origin.id }) : []),
-    [origin, category],
+    () => (origin ? findNearestByRoute(origin, { category, k: 4, mode, excludeId: origin.id }) : []),
+    [origin, category, mode],
   );
   const closest = nearest[0];
+  // Travel time to the closest place by every mode, for the mode tiles.
+  const minutesByMode = useMemo(() => {
+    const out: Partial<Record<TravelMode, number>> = {};
+    if (!origin || !closest) return out;
+    for (const m of TRAVEL_MODES) {
+      out[m.id] = m.id === mode ? closest.route?.minutes : findRoute(origin, closest.location, m.id)?.minutes;
+    }
+    return out;
+  }, [origin, closest, mode]);
   const meta = CATEGORY_META[category];
   const label = (TILE[category]?.label ?? meta.label).toLowerCase();
 
@@ -203,7 +221,7 @@ export default function Home() {
                     <Text style={styles.routeEyebrow}>Closest {label} · route to</Text>
                     <Text style={styles.routeTitle} numberOfLines={1}>{closest.location.name}</Text>
                     <Text style={styles.routeMeta} numberOfLines={2}>
-                      {formatMiles(closest.meters)} · {travelMinutes(closest.meters, mode)} min {mode === 'walk' ? 'walk' : ''}
+                      {tripText(closest.route, mode)} · {formatMiles(closest.meters)} straight-line
                       {closest.location.building ? ` · ${closest.location.subtitle}` : ''}
                     </Text>
                   </View>
@@ -211,7 +229,7 @@ export default function Home() {
                 </Pressable>
                 {!mobile && (
                   <View style={{ flex: 1.3 }}>
-                    <TravelModes minutes={(m) => travelMinutes(closest.meters, m)} selected={mode} onSelect={setMode} />
+                    <TravelModes minutes={(m) => minutesByMode[m]} selected={mode} onSelect={setMode} />
                   </View>
                 )}
               </>
@@ -240,7 +258,7 @@ export default function Home() {
               <Text style={styles.listTitle}>
                 More {label} near {origin?.name}
               </Text>
-              {nearest.slice(1).map(({ location, meters }) => (
+              {nearest.slice(1).map(({ location, meters, route }) => (
                 <Pressable
                   key={location.id}
                   style={({ hovered }: any) => [styles.listRow, hovered && { backgroundColor: colors.keaneyTint }]}
@@ -251,7 +269,10 @@ export default function Home() {
                     <Text style={styles.rowTitle}>{location.name}</Text>
                     <Text style={styles.rowSub}>{location.subtitle}</Text>
                   </View>
-                  <Text style={styles.rowDist}>{formatMiles(meters)}</Text>
+                  <View style={styles.rowRight}>
+                    <Text style={styles.rowDist}>{route ? `${route.minutes} min` : 'No route'}</Text>
+                    <Text style={styles.rowSub}>{formatMiles(meters)} away</Text>
+                  </View>
                 </Pressable>
               ))}
             </View>
@@ -360,6 +381,7 @@ const styles = StyleSheet.create({
   listRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 8, borderRadius: radius.sm },
   rowTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
   rowSub: { fontSize: 12, color: colors.textMuted },
+  rowRight: { alignItems: 'flex-end' },
   rowDist: { fontSize: 13, fontWeight: '600', color: colors.navy },
 
   section: { gap: 12, marginTop: 8 },
