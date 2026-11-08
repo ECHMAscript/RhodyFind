@@ -29,7 +29,8 @@ export type PlaceDetails = {
   photoCreditUrl?: string;
   /** Where to see a photo when the app can't show one (no license to copy it). */
   photoLink?: { label: string; url: string };
-  sources: { label: string; url: string }[];
+  /** Where each fact came from; `url` is left out for things checked in person. */
+  sources: { label: string; url?: string }[];
 };
 
 const CLASSROOM_DIRECTORY = {
@@ -56,6 +57,8 @@ const HOPE_COMMONS_NEWS = {
   url: 'https://www.foodservicedirector.com/colleges-universities/the-university-of-rhode-island-has-opened-its-23-million-hope-commons-dining-center-prompting-long-lines-that-have-reduced-at-least-temporarily-the-participation-at-the-campuss-dozen-other-dining-outlets',
 };
 const OSM = { label: 'OpenStreetMap (address)', url: 'https://www.openstreetmap.org/' };
+// Facts the RhodyFind team checked by visiting the building.
+const IN_PERSON = { label: 'Checked in person by the RhodyFind team (Nov 2026): floors, bathrooms, elevator' };
 
 export const PLACE_DETAILS: Record<string, PlaceDetails> = {
   // ---------------------------------------------------------------- Landmarks
@@ -620,8 +623,10 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       'rebuilt it with new classrooms, offices, a lecture hall and an enclosed lobby.',
     address: '60 Upper College Road, Kingston, RI 02881',
     built: '1961 (rebuilt inside 2004–2006)',
-    floors: 'At least 3: rooms on the 1st (e.g. 154), 2nd and 3rd floors. Basement not confirmed.',
+    floors: '3 (checked in person, Nov 2026)',
     classrooms: '18 in all. The general classrooms are on the 2nd floor (rooms 201–215) and 3rd floor (305–313), 24 to 48 seats each',
+    bathrooms: '3, one on each floor (checked in person, Nov 2026)',
+    accessibility: 'Elevator: yes (checked in person, Nov 2026)',
     highlights: [
       'Swan Auditorium seats 231',
       'Language Center in room 301, plus a language lab and a film screening room',
@@ -630,6 +635,7 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
     ],
     photoLink: { label: 'See a photo of Swan Hall on URI Events', url: 'https://events.uri.edu/swan_hall' },
     sources: [
+      IN_PERSON,
       { label: 'The Good 5¢ Cigar: Building on History: Swan Hall', url: 'https://rhodycigar.com/?p=37520' },
       {
         label: 'URI News: URI dedicates Swan building (2008)',

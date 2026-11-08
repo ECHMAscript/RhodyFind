@@ -125,11 +125,17 @@ export default function PlaceScreen() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Sources</Text>
-              {details.sources.map((s) => (
-                <Text key={s.url} style={styles.source} onPress={() => Linking.openURL(s.url)} accessibilityRole="link">
-                  {s.label}
-                </Text>
-              ))}
+              {details.sources.map((s) =>
+                s.url ? (
+                  <Text key={s.label} style={styles.source} onPress={() => Linking.openURL(s.url!)} accessibilityRole="link">
+                    {s.label}
+                  </Text>
+                ) : (
+                  <Text key={s.label} style={styles.sourcePlain}>
+                    {s.label}
+                  </Text>
+                ),
+              )}
             </View>
           </>
         ) : (
@@ -189,4 +195,5 @@ const styles = StyleSheet.create({
   bullet: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   bulletText: { flex: 1, fontSize: 14, lineHeight: 20, color: colors.text },
   source: { fontSize: 13, color: colors.navy, textDecorationLine: 'underline' },
+  sourcePlain: { fontSize: 13, color: colors.text },
 });

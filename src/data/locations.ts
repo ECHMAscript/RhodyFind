@@ -126,7 +126,7 @@ const BUILDINGS: CampusLocation[] = [
 
 // Restrooms, from URI's list of gender-inclusive restrooms (as of 2021):
 // building id -> where they are. Quinn and the Welcome Center are from an
-// accessibility review (Critique Access). Every building also has standard
+// accessibility review (Critique Access); Swan Hall was checked in person. Every building also has standard
 // restrooms; these are the ones a public source names.
 export const RESTROOMS: Record<string, string> = {
   avedisian: '2nd floor (rooms 230B, 291), 3rd floor (387A)',
@@ -147,6 +147,7 @@ export const RESTROOMS: Record<string, string> = {
 const REVIEWED_RESTROOMS: Record<string, string> = {
   'welcome-center': 'Accessible restrooms',
   quinn: 'Accessible restrooms on the 1st floor',
+  'swan-hall': 'Restrooms on every floor (one per floor)',
 };
 
 // Printers for students, from URI ITS "Pay for Print", plus the print shop.
