@@ -53,9 +53,12 @@ const TOOLTIP_OFFSET: Record<string, L.PointTuple> = { top: [0, -14], bottom: [0
 const PlaceMarker = memo(function PlaceMarker({
   place,
   onPress,
+  dimmed = false,
 }: {
   place: CampusLocation;
   onPress?: (place: CampusLocation) => void;
+  /** A route is on the map and this place isn't on it: fade it and drop its label. */
+  dimmed?: boolean;
 }) {
   const position = useMemo<L.LatLngTuple>(() => [place.lat, place.lng], [place.lat, place.lng]);
   const handlers = useMemo(() => ({ click: () => onPress?.(place) }), [onPress, place]);
@@ -65,9 +68,16 @@ const PlaceMarker = memo(function PlaceMarker({
       position={position}
       icon={badgeIcon(CATEGORY_META[place.category].icon, !!place.major)}
       eventHandlers={handlers}
-      zIndexOffset={place.major ? 100 : 0}
+      zIndexOffset={place.major && !dimmed ? 100 : 0}
+      opacity={dimmed ? 0.4 : 1}
     >
-      <Tooltip direction={side} offset={TOOLTIP_OFFSET[side]} permanent={!!place.major}>
+      {/* Keyed so the label is rebuilt when it switches between always-on and hover-only. */}
+      <Tooltip
+        key={String(place.major && !dimmed)}
+        direction={side}
+        offset={TOOLTIP_OFFSET[side]}
+        permanent={!!place.major && !dimmed}
+      >
         {place.name}
       </Tooltip>
     </Marker>
@@ -85,9 +95,14 @@ function FitBounds({ points, bottomInset }: { points: L.LatLngTuple[]; bottomIns
   }, [bottomInset]);
   useEffect(() => {
     if (!points.length) return;
+    // Padding that scales with the map: 60 px on a big screen, about 24 px on
+    // a phone's map strip, so a short route isn't framed far away. The top
+    // gets room for the pins, which stand about 34 px above their point.
+    const size = map.getSize();
+    const pad = Math.round(Math.max(20, Math.min(60, Math.min(size.x, size.y) * 0.07)));
     map.fitBounds(L.latLngBounds(points), {
-      paddingTopLeft: [60, 60],
-      paddingBottomRight: [60, 60 + inset.current],
+      paddingTopLeft: [pad, pad + 30],
+      paddingBottomRight: [pad, pad + inset.current],
       maxZoom: points.length > 1 ? 18 : 17,
       animate: true,
     });
@@ -415,6 +430,7 @@ export const CampusMap = memo(function CampusMap({
     [route, fromPos, toPos],
   );
   const highlightPath = useMemo(() => highlight?.map(toTuple), [highlight]);
+  const hasRoute = !!route;
   const frame = useMemo(
     () => (fitTo ? fitTo.map(toTuple) : ([fromPos, toPos].filter(Boolean) as L.LatLngTuple[])),
     [fitTo, fromPos, toPos],
@@ -429,6 +445,12 @@ export const CampusMap = memo(function CampusMap({
       zoom={16}
       zoomControl={false}
       renderer={renderer}
+      // Quarter-step zoom, so a route can be framed tightly instead of
+      // dropping a whole level when it's slightly too big; the zoom
+      // buttons still move a full level.
+      zoomSnap={0.25}
+      zoomDelta={1}
+      wheelPxPerZoomLevel={120}
       style={{ width: '100%', height: '100%' }}
     >
       <TileLayer
@@ -440,7 +462,12 @@ export const CampusMap = memo(function CampusMap({
       <FitBounds points={follow && userFix ? NO_POINTS : frame} bottomInset={bottomInset} />
 
       {places.map((p) => (
-        <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
+        <PlaceMarker
+          key={p.id}
+          place={p}
+          onPress={onPlacePress}
+          dimmed={hasRoute && p.id !== from?.id && p.id !== to?.id}
+        />
       ))}
 
       {path && <RouteLine positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} trimTo={trimTo} />}

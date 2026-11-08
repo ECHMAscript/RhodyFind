@@ -29,6 +29,8 @@ import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
+// How far the phone layout's panel overlaps the bottom of the map (its marginTop).
+const PANEL_OVERLAP = 20;
 const OFF_ROUTE_METERS = 30;
 // Arrived when this close along the route...
 const ARRIVED_METERS = 20;
@@ -485,7 +487,9 @@ export default function MapScreen() {
       follow={follow}
       fitTo={fitTo}
       onUserPan={onUserPan}
-      bottomInset={sheet ? peekHeight : 0}
+      // Phone, sheet down: the sheet covers the bottom. Phone, planning: the
+      // panel's rounded top overlaps the map by PANEL_OVERLAP.
+      bottomInset={sheet ? peekHeight : mobile ? PANEL_OVERLAP : 0}
     />
   );
   // After the user drags the map mid-navigation, offer a way back to following.
@@ -562,7 +566,7 @@ const styles = StyleSheet.create({
   bodyMobile: { flexDirection: 'column' },
 
   panel: { width: 400, flexGrow: 0, backgroundColor: colors.white, borderRightWidth: 1, borderRightColor: colors.border },
-  panelMobile: { width: '100%', flex: 1, flexGrow: 1, zIndex: 2, borderRightWidth: 0, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -20, ...shadow.card },
+  panelMobile: { width: '100%', flex: 1, flexGrow: 1, zIndex: 2, borderRightWidth: 0, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, marginTop: -PANEL_OVERLAP, ...shadow.card },
   panelContent: { padding: 20, gap: 14 },
 
   map: { flex: 1 },
