@@ -80,6 +80,7 @@ class BruteForce {
   }
 
   std::size_t size() const { return pts_.size(); }
+  const std::vector<Point>& points() const { return pts_; }
 
  private:
   std::vector<Point> pts_;

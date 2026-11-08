@@ -118,6 +118,25 @@ export class SpatialIndex {
     return ms;
   }
 
+  /**
+   * Accurate time per query in milliseconds: runs the queries (cycling
+   * through them) inside WebAssembly until at least minMs has passed. Long
+   * runs make the browser's coarse ~0.1 ms clock a negligible error.
+   */
+  timeQuery(queries: Float64Array, k: number, method: 'kdtree' | 'brute', minMs: number): number {
+    const m = this.m;
+    const ptr = m._malloc(Math.max(queries.byteLength, 8));
+    m.HEAPF64.set(queries, ptr / 8);
+    const ms = (method === 'kdtree' ? m._kd_time_query : m._bf_time_query)(this.handle, ptr, queries.length / 2, k, minMs);
+    m._free(ptr);
+    return ms;
+  }
+
+  /** Accurate time per tree build in milliseconds (rebuilds until at least minMs has passed). */
+  timeBuild(minMs: number): number {
+    return this.m._kd_time_build(this.handle, minMs);
+  }
+
   free() {
     if (this.outCap) {
       this.m._free(this.outIds);

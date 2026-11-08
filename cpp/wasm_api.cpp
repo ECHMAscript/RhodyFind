@@ -92,4 +92,72 @@ EMSCRIPTEN_KEEPALIVE double bf_bench(int h, const double* qxy, int nq, int k) {
   return emscripten_get_now() - t;
 }
 
+// ---------------------------------------------------------------------------
+// Accurate timing. Browsers coarsen their clock (to about 0.1 ms, plus jitter)
+// so a page can't time things precisely. A single fast measurement is then
+// mostly rounding: 1,000 k-d tree searches take under 1 ms, about the size of
+// one clock tick. These repeat the work until at least `minMs` has passed and
+// divide by how many times it ran, so one tick is a tiny share of the total.
+
+}  // extern "C"
+
+namespace {
+
+// Runs `step` (one unit of work) until minMs has passed; returns ms per unit.
+// The clock is read after 1, 2, 4, ... units, capped at 1024, so reading it
+// costs almost nothing next to the work, and stopping overshoots by at most
+// a quarter of the target.
+template <class Step>
+double timePerUnit(double minMs, Step step) {
+  long long done = 0;
+  long long stride = 1;
+  const double start = emscripten_get_now();
+  double elapsed = 0;
+  for (;;) {
+    for (long long i = 0; i < stride; ++i) step(done + i);
+    done += stride;
+    elapsed = emscripten_get_now() - start;
+    if (elapsed >= minMs) break;
+    if (elapsed < minMs / 4 && stride < 1024) stride *= 2;
+  }
+  return elapsed / double(done);
+}
+
+}  // namespace
+
+extern "C" {
+
+// Milliseconds per query: repeats the nq queries (cycling through them) until
+// at least minMs has passed.
+EMSCRIPTEN_KEEPALIVE double kd_time_query(int h, const double* qxy, int nq, int k, double minMs) {
+  Index* ix = get(h);
+  if (!ix || nq <= 0) return -1;
+  return timePerUnit(minMs, [&](long long i) {
+    const int q = int(i % nq);
+    sink += ix->tree.kNearest(qxy[2 * q], qxy[2 * q + 1], k).size();
+  });
+}
+
+EMSCRIPTEN_KEEPALIVE double bf_time_query(int h, const double* qxy, int nq, int k, double minMs) {
+  Index* ix = get(h);
+  if (!ix || nq <= 0) return -1;
+  return timePerUnit(minMs, [&](long long i) {
+    const int q = int(i % nq);
+    sink += ix->brute.kNearest(qxy[2 * q], qxy[2 * q + 1], k).size();
+  });
+}
+
+// Milliseconds per tree build over the index's points: builds a fresh tree
+// (including copying the points into it, as KDTree's constructor does)
+// until at least minMs has passed.
+EMSCRIPTEN_KEEPALIVE double kd_time_build(int h, double minMs) {
+  Index* ix = get(h);
+  if (!ix) return -1;
+  const std::vector<Point>& pts = ix->brute.points();
+  return timePerUnit(minMs, [&](long long) {
+    KDTree tree(pts);
+    sink += static_cast<long long>(tree.size());
+  });
+}
+
 }  // extern "C"

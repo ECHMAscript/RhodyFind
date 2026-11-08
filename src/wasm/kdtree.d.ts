@@ -10,6 +10,11 @@ export type KDTreeModule = {
   _kd_bench(handle: number, qPtr: number, nq: number, k: number): number;
   _bf_bench(handle: number, qPtr: number, nq: number, k: number): number;
   _kd_last_build_ms(): number;
+  /** Milliseconds per query, repeating the queries until at least minMs has passed. */
+  _kd_time_query(handle: number, qPtr: number, nq: number, k: number, minMs: number): number;
+  _bf_time_query(handle: number, qPtr: number, nq: number, k: number, minMs: number): number;
+  /** Milliseconds per tree build, rebuilding until at least minMs has passed. */
+  _kd_time_build(handle: number, minMs: number): number;
   HEAPF64: Float64Array;
   HEAP32: Int32Array;
 };

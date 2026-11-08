@@ -18,7 +18,8 @@ const M = { top: 16, right: 104, bottom: 44, left: 64 };
 const PW = W - M.left - M.right;
 const PH = H - M.top - M.bottom;
 
-const fmtN = (n: number) => (n >= 1000 ? `${n / 1000}k` : String(n));
+const fmtN = (n: number) =>
+  n >= 1_000_000 ? `${+(n / 1_000_000).toFixed(2)}M` : n >= 1000 ? `${+(n / 1000).toFixed(1)}k` : String(n);
 export const fmtUs = (us: number) =>
   us >= 1000 ? `${(us / 1000).toFixed(us >= 10_000 ? 0 : 1)} ms` : us >= 10 ? `${us.toFixed(0)} µs` : `${us.toFixed(2)} µs`;
 const fmtTick = (us: number) => (us >= 1000 ? `${us / 1000} ms` : `${us} µs`);
@@ -54,7 +55,9 @@ export function BenchmarkChart({ rows }: { rows: BenchRow[] }) {
   }
 
   const h = hover === null ? null : rows[hover];
-  const colW = rows.length > 1 ? PW / (rows.length - 1) : PW;
+  // Hover columns reach halfway to each neighbor (sizes needn't be evenly spaced).
+  const colEdge = (i: number) =>
+    i <= 0 ? M.left : i >= rows.length ? M.left + PW : (x(rows[i - 1].n) + x(rows[i].n)) / 2;
 
   return (
     <div style={{ position: 'relative', width: '100%', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
@@ -139,9 +142,9 @@ export function BenchmarkChart({ rows }: { rows: BenchRow[] }) {
         {rows.map((r, i) => (
           <rect
             key={r.n}
-            x={x(r.n) - colW / 2}
+            x={colEdge(i)}
             y={M.top}
-            width={colW}
+            width={Math.max(1, colEdge(i + 1) - colEdge(i))}
             height={PH}
             fill="transparent"
             onMouseEnter={() => setHover(i)}

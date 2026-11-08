@@ -7,7 +7,7 @@ CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra
 BUILD := build
 
-WASM_EXPORTS := _malloc,_free,_kd_create,_kd_free,_kd_size,_kd_knn,_bf_knn,_kd_bench,_bf_bench,_kd_last_build_ms
+WASM_EXPORTS := _malloc,_free,_kd_create,_kd_free,_kd_size,_kd_knn,_bf_knn,_kd_bench,_bf_bench,_kd_last_build_ms,_kd_time_query,_bf_time_query,_kd_time_build
 
 .PHONY: test bench wasm clean
 

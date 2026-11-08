@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Header } from '@/components/Header';
 import { BenchmarkChart, SERIES, fmtUs } from '@/components/BenchmarkChart';
 import nativeResults from '@/data/benchmarkNative.json';
-import { BENCH_SIZES, runWasmBenchmark, type BenchRow } from '@/lib/spatial/benchmark';
+import {
+  BENCH_METHOD,
+  BENCH_SIZES,
+  MAX_BENCH_POINTS,
+  MAX_BENCH_SIZES,
+  parsePointCount,
+  runWasmBenchmark,
+  type BenchRow,
+} from '@/lib/spatial/benchmark';
 import { onSpatialEngineReady, spatialEngineReady } from '@/lib/spatial/engine';
 import { breakpoints, colors, radius, shadow } from '@/theme';
 
@@ -24,14 +32,42 @@ export default function PerformanceScreen() {
   const [live, setLive] = useState<Record<number, BenchRow[]>>({});
   const [running, setRunning] = useState(false);
 
+  // Point counts to test in the browser, editable.
+  const [sizes, setSizes] = useState<number[]>(BENCH_SIZES);
+  const [runSizes, setRunSizes] = useState<number[]>(BENCH_SIZES);
+  const [sizeText, setSizeText] = useState('');
+  const [sizeError, setSizeError] = useState<string>();
+  const addSize = () => {
+    const n = parsePointCount(sizeText);
+    if (n === undefined) {
+      setSizeError(`Enter a whole number from 1 to ${MAX_BENCH_POINTS.toLocaleString()} (for example 5000, 25k or 1m).`);
+      return;
+    }
+    if (sizes.includes(n)) {
+      setSizeError(`${n.toLocaleString()} is already in the list.`);
+      return;
+    }
+    if (sizes.length >= MAX_BENCH_SIZES) {
+      setSizeError(`Up to ${MAX_BENCH_SIZES} sizes at a time. Remove one first.`);
+      return;
+    }
+    setSizes([...sizes, n].sort((a, b) => a - b));
+    setSizeText('');
+    setSizeError(undefined);
+  };
+  const removeSize = (n: number) => setSizes(sizes.filter((x) => x !== n));
+  const largeRun = Math.max(...sizes) > 500_000;
+
   const rows = source === 'native' ? NATIVE_ROWS.filter((r) => r.k === k) : (live[k] ?? []);
   const largest = rows[rows.length - 1];
 
   const run = async () => {
+    if (!sizes.length) return;
     setSource('live');
     setRunning(true);
+    setRunSizes(sizes);
     setLive((l) => ({ ...l, [k]: [] }));
-    await runWasmBenchmark(k, (row) => setLive((l) => ({ ...l, [k]: [...(l[k] ?? []), row] })));
+    await runWasmBenchmark(k, (row) => setLive((l) => ({ ...l, [k]: [...(l[k] ?? []), row] })), sizes);
     setRunning(false);
   };
 
@@ -100,14 +136,76 @@ export default function PerformanceScreen() {
                 </View>
               )}
               <BenchmarkChart rows={rows} />
-              <Table rows={rows} running={running && source === 'live'} />
+              <Table rows={rows} running={running && source === 'live'} sizes={runSizes} />
             </>
           )}
 
+          {/* Point counts to test */}
+          <View style={styles.sizes}>
+            <Text style={styles.sizesTitle}>Points to test</Text>
+            <View style={styles.chips}>
+              {sizes.map((n) => (
+                <View key={n} style={styles.chip}>
+                  <Text style={styles.chipText}>{n.toLocaleString()}</Text>
+                  <Pressable
+                    onPress={() => removeSize(n)}
+                    disabled={running}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${n.toLocaleString()} points`}
+                    hitSlop={8}
+                  >
+                    <MaterialCommunityIcons name="close" size={14} color={colors.navy} />
+                  </Pressable>
+                </View>
+              ))}
+              {!sizes.length && <Text style={styles.note}>Add at least one size to run the benchmark.</Text>}
+            </View>
+            <View style={styles.addRow}>
+              <TextInput
+                value={sizeText}
+                onChangeText={(t) => {
+                  setSizeText(t);
+                  setSizeError(undefined);
+                }}
+                onSubmitEditing={addSize}
+                placeholder="e.g. 5000, 25k or 1m"
+                placeholderTextColor={colors.gray}
+                inputMode="numeric"
+                editable={!running}
+                style={styles.input}
+                accessibilityLabel="Number of points to add"
+              />
+              <Pressable
+                style={[styles.addBtn, (!sizeText.trim() || running) && styles.runDisabled]}
+                disabled={!sizeText.trim() || running}
+                onPress={addSize}
+                accessibilityRole="button"
+              >
+                <MaterialCommunityIcons name="plus" size={16} color={colors.white} />
+                <Text style={styles.addText}>Add</Text>
+              </Pressable>
+              <Pressable
+                style={styles.resetBtn}
+                disabled={running}
+                onPress={() => {
+                  setSizes(BENCH_SIZES);
+                  setSizeError(undefined);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.resetText}>Reset</Text>
+              </Pressable>
+            </View>
+            {sizeError && <Text style={styles.sizeError}>{sizeError}</Text>}
+            {largeRun && !sizeError && (
+              <Text style={styles.note}>Sizes over 500,000 points can take several seconds each to set up and measure.</Text>
+            )}
+          </View>
+
           <View style={styles.runRow}>
             <Pressable
-              style={[styles.run, (!engineReady || running) && styles.runDisabled]}
-              disabled={!engineReady || running}
+              style={[styles.run, (!engineReady || running || !sizes.length) && styles.runDisabled]}
+              disabled={!engineReady || running || !sizes.length}
               onPress={run}
               accessibilityRole="button"
             >
@@ -117,7 +215,7 @@ export default function PerformanceScreen() {
             <Text style={styles.note}>
               {source === 'native'
                 ? `${nativeResults.source}. Points are random over an area the size of campus.`
-                : `WebAssembly, ${BENCH_SIZES.length} sizes, 1,000 searches each, median of 3 runs. Both methods run inside WebAssembly.`}
+                : `Both methods run inside WebAssembly on the same random points. Browsers round their clock to about 0.1 ms, so each timing repeats the searches (cycling through ${BENCH_METHOD.queries.toLocaleString()} query points) until at least ${BENCH_METHOD.minSampleMs} ms has passed. The fastest of ${BENCH_METHOD.samples} tries is shown, since other activity on the computer can only slow a try down.`}
             </Text>
           </View>
         </View>
@@ -168,7 +266,7 @@ function Tile({ value, label, swatch }: { value: string; label: string; swatch?:
   );
 }
 
-function Table({ rows, running }: { rows: BenchRow[]; running: boolean }) {
+function Table({ rows, running, sizes }: { rows: BenchRow[]; running: boolean; sizes: number[] }) {
   return (
     <View style={styles.table} accessibilityRole="summary">
       <View style={[styles.tr, styles.thead]}>
@@ -190,9 +288,9 @@ function Table({ rows, running }: { rows: BenchRow[]; running: boolean }) {
           </Text>
         </View>
       ))}
-      {running && rows.length < BENCH_SIZES.length && (
+      {running && rows.length < sizes.length && (
         <View style={styles.tr}>
-          <Text style={[styles.td, styles.cellN]}>{BENCH_SIZES[rows.length].toLocaleString()}</Text>
+          <Text style={[styles.td, styles.cellN]}>{[...sizes].sort((a, b) => a - b)[rows.length].toLocaleString()}</Text>
           <Text style={[styles.td, styles.muted]}>measuring…</Text>
         </View>
       )}
@@ -251,6 +349,18 @@ const styles = StyleSheet.create({
   muted: { color: colors.textMuted },
   verified: { fontSize: 13, color: '#0E7A4B', marginTop: 10 },
 
+  sizes: { gap: 10, paddingTop: 4, borderTopWidth: 1, borderTopColor: colors.border },
+  sizesTitle: { fontSize: 14, fontWeight: '700', color: colors.navy, marginTop: 12 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 8, height: 32, borderRadius: radius.pill, backgroundColor: colors.keaneyTint },
+  chipText: { fontSize: 13, fontWeight: '700', color: colors.navy, fontVariant: ['tabular-nums'] },
+  addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  input: { flexGrow: 1, flexBasis: 180, maxWidth: 280, height: 40, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, fontSize: 14, color: colors.text, backgroundColor: colors.white },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.navy },
+  addText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+  resetBtn: { height: 40, paddingHorizontal: 12, justifyContent: 'center' },
+  resetText: { color: colors.navy, fontWeight: '600', fontSize: 14, textDecorationLine: 'underline' },
+  sizeError: { fontSize: 13, color: colors.danger },
   runRow: { gap: 8 },
   run: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: radius.pill, backgroundColor: colors.navy, alignSelf: 'flex-start', paddingHorizontal: 20 },
   runDisabled: { opacity: 0.45 },

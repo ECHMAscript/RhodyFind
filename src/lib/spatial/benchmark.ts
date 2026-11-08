@@ -12,13 +12,29 @@ export type BenchRow = {
 };
 
 export const BENCH_SIZES = [100, 1_000, 10_000, 100_000];
+/** Largest point count the in-browser benchmark accepts. */
+export const MAX_BENCH_POINTS = 2_000_000;
+export const MAX_BENCH_SIZES = 8;
 
 // Random points over an area about the size of the Kingston campus (meters).
 const WIDTH_M = 2500;
 const HEIGHT_M = 2000;
-const QUERIES = 1000;
-const RUNS = 3; // the median run is reported
+// Distinct query points, cycled through. Enough that the searches don't all
+// hit the same few cached tree nodes.
+const QUERIES = 10_000;
+// Each timing keeps running until this long has passed. Browsers round their
+// clock to about 0.1 ms (plus jitter), so 60 ms keeps that error under 0.2%.
+const MIN_SAMPLE_MS = 60;
+// Samples per method; the fastest is reported. Other work on the computer
+// (other tabs, a busy CPU, a background tab getting less CPU) can only make
+// a sample slower, never faster, so the fastest is the cleanest measurement.
+const SAMPLES = 7;
+const BUILD_SAMPLES = 5;
+const WARMUP_MS = 20;
 const CHECKS = 100; // queries compared between the two methods
+
+/** The settings used, for the page's note. */
+export const BENCH_METHOD = { queries: QUERIES, minSampleMs: MIN_SAMPLE_MS, samples: SAMPLES };
 
 // Small seeded PRNG so every run uses the same points.
 function mulberry32(seed: number) {
@@ -40,29 +56,60 @@ function randomXY(count: number, rand: () => number): Float64Array {
   return xy;
 }
 
-const median = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)];
+const fastest = (v: number[]) => Math.min(...v);
 const nextFrame = () => new Promise<void>((r) => setTimeout(r, 0));
 
 /**
- * Runs the C++ k-d tree and brute force (both in WebAssembly) at each size.
- * Calls onRow as each size finishes so the page can update. Returns null if
- * the WebAssembly engine isn't loaded.
+ * Parses a point count typed by the user: "5000", "5,000", "5k", "2.5k", "1m".
+ * Returns undefined if it isn't a whole number from 1 to MAX_BENCH_POINTS.
  */
-export async function runWasmBenchmark(k: number, onRow: (row: BenchRow) => void): Promise<BenchRow[] | null> {
-  const rand = mulberry32(212);
-  const queries = randomXY(QUERIES, rand);
+export function parsePointCount(text: string): number | undefined {
+  const t = text.trim().toLowerCase().replace(/[,_\s]/g, '');
+  const m = /^(\d+(?:\.\d+)?)([km]?)$/.exec(t);
+  if (!m) return undefined;
+  const n = Math.round(Number(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1));
+  return Number.isFinite(n) && n >= 1 && n <= MAX_BENCH_POINTS ? n : undefined;
+}
+
+/**
+ * Runs the C++ k-d tree and brute force (both in WebAssembly) at each size.
+ * For accuracy, every timing repeats the work until at least 60 ms has
+ * passed, the two methods take turns going first, and the fastest of 7
+ * samples is kept. Calls onRow as each size finishes so the page can update.
+ * Returns null if the WebAssembly engine isn't loaded.
+ */
+export async function runWasmBenchmark(
+  k: number,
+  onRow: (row: BenchRow) => void,
+  sizes: number[] = BENCH_SIZES,
+): Promise<BenchRow[] | null> {
+  const queryRand = mulberry32(42);
+  const queries = randomXY(QUERIES, queryRand);
   const rows: BenchRow[] = [];
-  for (const n of BENCH_SIZES) {
+  for (const n of [...sizes].sort((a, b) => a - b)) {
     await nextFrame(); // let the page paint progress between sizes
-    const index = SpatialIndex.fromXY(randomXY(n, rand));
+    const index = SpatialIndex.fromXY(randomXY(n, mulberry32(212 + n)));
     if (!index) return null;
     try {
+      // Warm up: the first runs pay for WebAssembly compilation and cold caches.
+      index.timeQuery(queries, k, 'kdtree', WARMUP_MS);
+      index.timeQuery(queries, k, 'brute', WARMUP_MS);
+
       const kd: number[] = [];
       const bf: number[] = [];
-      for (let r = 0; r < RUNS; r++) {
-        kd.push((index.bench(queries, k, 'kdtree') * 1000) / QUERIES);
-        bf.push((index.bench(queries, k, 'brute') * 1000) / QUERIES);
+      for (let s = 0; s < SAMPLES; s++) {
+        // Alternate which goes first so neither always runs on a warmer CPU.
+        const order: ('kdtree' | 'brute')[] = s % 2 ? ['brute', 'kdtree'] : ['kdtree', 'brute'];
+        for (const method of order) {
+          const msPerQuery = index.timeQuery(queries, k, method, MIN_SAMPLE_MS);
+          (method === 'kdtree' ? kd : bf).push(msPerQuery * 1000);
+        }
+        await nextFrame();
       }
+
+      const builds: number[] = [];
+      for (let s = 0; s < BUILD_SAMPLES; s++) builds.push(index.timeBuild(MIN_SAMPLE_MS));
+
       let matches = true;
       for (let i = 0; i < CHECKS && matches; i++) {
         const x = queries[2 * i];
@@ -71,7 +118,7 @@ export async function runWasmBenchmark(k: number, onRow: (row: BenchRow) => void
         const b = index.kNearestXY(x, y, k, 'brute');
         matches = a.length === b.length && a.every((nb, j) => Math.abs(nb.dist2 - b[j].dist2) < 1e-6);
       }
-      const row = { n, k, buildMs: index.buildMs, kdQueryUs: median(kd), bfQueryUs: median(bf), matches };
+      const row = { n, k, buildMs: fastest(builds), kdQueryUs: fastest(kd), bfQueryUs: fastest(bf), matches };
       rows.push(row);
       onRow(row);
     } finally {
