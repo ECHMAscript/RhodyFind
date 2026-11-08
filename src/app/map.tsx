@@ -481,6 +481,7 @@ export default function MapScreen() {
       route={routeShown}
       highlight={highlight}
       userFix={farAway ? undefined : fix}
+      trimRouteToUser={live}
       follow={follow}
       fitTo={fitTo}
       onUserPan={onUserPan}

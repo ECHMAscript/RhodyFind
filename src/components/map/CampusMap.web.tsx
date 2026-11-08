@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
 import { colors } from '@/theme';
-import type { LatLng } from '@/lib/geo';
+import { haversineMeters, type LatLng } from '@/lib/geo';
 import { predictPosition, smoothToward } from '@/lib/motion';
 import type { LiveFix } from '@/lib/useWatchPosition';
 import type { CampusMapProps } from './types';
@@ -146,11 +146,14 @@ function LiveUser({
   follow,
   onUserPan,
   bottomInset,
+  frameListeners,
 }: {
   fix: LiveFix;
   follow: boolean;
   onUserPan?: () => void;
   bottomInset: number;
+  /** Called with the dot's position on every frame it moves (route lines trim to it). */
+  frameListeners: Set<FrameListener>;
 }) {
   const map = useMap();
   const markerRef = useRef<L.Marker>(null);
@@ -205,7 +208,10 @@ function LiveUser({
       const moved = !shown || next.lat !== shown.lat || next.lng !== shown.lng;
       shown = next;
       const ll: L.LatLngTuple = [next.lat, next.lng];
-      if (moved) markerRef.current?.setLatLng(ll);
+      if (moved) {
+        markerRef.current?.setLatLng(ll);
+        for (const listener of frameListeners) listener(next);
+      }
       const insetMoved = Math.abs(insetRef.current - inset) > 0.5;
       inset = insetMoved ? inset + (insetRef.current - inset) * Math.min(1, frameMs / 150) : insetRef.current;
       if (!followRef.current) {
@@ -228,7 +234,7 @@ function LiveUser({
       map.off('zoomstart', onZoomStart);
       map.off('zoomend', onZoomEnd);
     };
-  }, [map]);
+  }, [map, frameListeners]);
 
   useEffect(() => {
     if (!follow || !onUserPan) return;
@@ -250,11 +256,26 @@ function LiveUser({
  * in-between zoom and stretches it again, so it slides off the road until the
  * zoom ends. New points that arrive mid-zoom are applied when the zoom ends.
  */
-function RouteLine({ positions, pathOptions }: { positions: L.LatLngTuple[]; pathOptions: L.PathOptions }) {
+function RouteLine({
+  positions,
+  pathOptions,
+  trimTo,
+}: {
+  positions: L.LatLngTuple[];
+  pathOptions: L.PathOptions;
+  /**
+   * While navigating: the live dot's frame listeners. The line is then cut at
+   * the dot's spot on it every frame, so no route is left behind the user
+   * between GPS fixes (which only arrive about once a second).
+   */
+  trimTo?: Set<FrameListener>;
+}) {
   const map = useMap();
   const [line] = useState(() => L.polyline([], pathOptions));
   const zooming = useRef(false);
   const pending = useRef<L.LatLngTuple[] | null>(null);
+  const current = useRef(positions);
+  const lastCut = useRef<{ index: number; point: LatLng } | null>(null);
 
   useEffect(() => {
     line.addTo(map);
@@ -282,6 +303,8 @@ function RouteLine({ positions, pathOptions }: { positions: L.LatLngTuple[]; pat
   }, [line, pathOptions]);
 
   useEffect(() => {
+    current.current = positions;
+    lastCut.current = null;
     if (zooming.current) pending.current = positions;
     else {
       pending.current = null;
@@ -289,7 +312,66 @@ function RouteLine({ positions, pathOptions }: { positions: L.LatLngTuple[]; pat
     }
   }, [line, positions]);
 
+  useEffect(() => {
+    if (!trimTo) return;
+    const onFrame = (p: LatLng) => {
+      // Never redraw mid-zoom (see above); the next frame after it catches up.
+      if (zooming.current || pending.current) return;
+      const pts = current.current;
+      const cut = cutAtUser(pts, p);
+      if (!cut) return;
+      const prev = lastCut.current;
+      // Skip changes too small to see (well under a pixel at street zoom).
+      if (prev && prev.index === cut.index && haversineMeters(prev.point, cut.point) < 0.3) return;
+      lastCut.current = cut;
+      line.setLatLngs([[cut.point.lat, cut.point.lng], ...pts.slice(cut.index + 1)]);
+    };
+    trimTo.add(onFrame);
+    return () => {
+      trimTo.delete(onFrame);
+      // No longer following: show the whole line again.
+      lastCut.current = null;
+      if (!zooming.current) line.setLatLngs(current.current);
+    };
+  }, [trimTo, line]);
+
   return null;
+}
+
+type FrameListener = (p: LatLng) => void;
+
+// How far along the line to look for the user (segments), and how far off it
+// they can be before the line is left alone (they're off route).
+const TRIM_SEGMENTS = 16;
+const TRIM_MAX_METERS = 40;
+
+/**
+ * Where to cut a route line so it starts at the user: the closest point to `p`
+ * on the line's first few segments, and the segment it's on. Null when the
+ * user isn't near the line.
+ */
+function cutAtUser(pts: L.LatLngTuple[], p: LatLng): { index: number; point: LatLng } | null {
+  if (pts.length < 2) return null;
+  // Flat x/y in meters around p; plenty accurate over a few hundred meters.
+  const kx = 111320 * Math.cos((p.lat * Math.PI) / 180);
+  const ky = 110540;
+  let best: { index: number; point: LatLng; d2: number } | null = null;
+  const last = Math.min(pts.length - 2, TRIM_SEGMENTS - 1);
+  for (let i = 0; i <= last; i++) {
+    const ax = (pts[i][1] - p.lng) * kx;
+    const ay = (pts[i][0] - p.lat) * ky;
+    const bx = (pts[i + 1][1] - p.lng) * kx;
+    const by = (pts[i + 1][0] - p.lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    const x = ax + t * dx;
+    const y = ay + t * dy;
+    const d2 = x * x + y * y;
+    if (!best || d2 < best.d2) best = { index: i, point: { lat: p.lat + y / ky, lng: p.lng + x / kx }, d2 };
+  }
+  return best && best.d2 <= TRIM_MAX_METERS * TRIM_MAX_METERS ? best : null;
 }
 
 const FROM_PIN = pinIcon(colors.keaney);
@@ -322,7 +404,10 @@ export const CampusMap = memo(function CampusMap({
   fitTo,
   onUserPan,
   bottomInset = 0,
+  trimRouteToUser = false,
 }: CampusMapProps) {
+  const [frameListeners] = useState(() => new Set<FrameListener>());
+  const trimTo = trimRouteToUser && userFix ? frameListeners : undefined;
   const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
   const toPos = useMemo<L.LatLngTuple | undefined>(() => to && [to.lat, to.lng], [to?.lat, to?.lng]);
   const path = useMemo(
@@ -358,11 +443,19 @@ export const CampusMap = memo(function CampusMap({
         <PlaceMarker key={p.id} place={p} onPress={onPlacePress} />
       ))}
 
-      {path && <RouteLine positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} />}
-      {highlightPath && <RouteLine positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} />}
+      {path && <RouteLine positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} trimTo={trimTo} />}
+      {highlightPath && <RouteLine positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} trimTo={trimTo} />}
       {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
       {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}
-      {userFix && <LiveUser fix={userFix} follow={follow} onUserPan={onUserPan} bottomInset={bottomInset} />}
+      {userFix && (
+        <LiveUser
+          fix={userFix}
+          follow={follow}
+          onUserPan={onUserPan}
+          bottomInset={bottomInset}
+          frameListeners={frameListeners}
+        />
+      )}
     </MapContainer>
   );
 });

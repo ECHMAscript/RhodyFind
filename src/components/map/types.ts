@@ -25,4 +25,6 @@ export type CampusMapProps = {
    * on phones). The camera keeps the user and fitted routes above it.
    */
   bottomInset?: number;
+  /** Navigating on the route: cut the drawn route at the moving dot, every frame (web). */
+  trimRouteToUser?: boolean;
 };
