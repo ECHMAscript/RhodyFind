@@ -99,6 +99,7 @@ export default function PerformanceScreen() {
         {/* Controls: one row above the chart */}
         <View style={styles.controls}>
           <Segmented
+            stretch={compact}
             value={source}
             onChange={setSource}
             options={[
@@ -228,13 +229,16 @@ function Segmented<T extends string | number>({
   value,
   onChange,
   options,
+  stretch = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string; disabled?: boolean }[];
+  /** Fill the row, sharing it evenly (small screens), so long labels never run off the edge. */
+  stretch?: boolean;
 }) {
   return (
-    <View style={styles.segmented}>
+    <View style={[styles.segmented, stretch && styles.segmentedStretch]}>
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -242,11 +246,13 @@ function Segmented<T extends string | number>({
             key={String(o.value)}
             disabled={o.disabled}
             onPress={() => onChange(o.value)}
-            style={[styles.segment, active && styles.segmentActive, o.disabled && styles.segmentDisabled]}
+            style={[styles.segment, stretch && styles.segmentStretch, active && styles.segmentActive, o.disabled && styles.segmentDisabled]}
             accessibilityRole="button"
             accessibilityState={{ selected: active, disabled: o.disabled }}
           >
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{o.label}</Text>
+            <Text style={[styles.segmentText, stretch && styles.segmentTextStretch, active && styles.segmentTextActive]}>
+              {o.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -322,6 +328,9 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   segmented: { flexDirection: 'row', backgroundColor: colors.white, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, padding: 3 },
   segment: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.pill },
+  segmentedStretch: { width: '100%' },
+  segmentStretch: { flex: 1, minWidth: 0, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
+  segmentTextStretch: { textAlign: 'center' },
   segmentActive: { backgroundColor: colors.navy },
   segmentDisabled: { opacity: 0.4 },
   segmentText: { fontSize: 13, fontWeight: '600', color: colors.navy },
@@ -355,7 +364,7 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 12, paddingRight: 8, height: 32, borderRadius: radius.pill, backgroundColor: colors.keaneyTint },
   chipText: { fontSize: 13, fontWeight: '700', color: colors.navy, fontVariant: ['tabular-nums'] },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  input: { flexGrow: 1, flexBasis: 180, maxWidth: 280, height: 40, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, fontSize: 14, color: colors.text, backgroundColor: colors.white },
+  input: { flexGrow: 1, flexBasis: 180, maxWidth: 280, height: 40, paddingHorizontal: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, fontSize: 16, color: colors.text, backgroundColor: colors.white }, // 16 px: no iPhone zoom-in on tap
   addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.navy },
   addText: { color: colors.white, fontWeight: '700', fontSize: 14 },
   resetBtn: { height: 40, paddingHorizontal: 12, justifyContent: 'center' },

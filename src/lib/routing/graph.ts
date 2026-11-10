@@ -1,5 +1,6 @@
 import raw from '@/data/campusGraph.json';
 import { haversineMeters } from '@/lib/geo';
+import { CAR_CLOSURES } from './closures';
 
 // Edge flags; must match scripts/build-campus-graph.mjs.
 export const FOOT = 1;
@@ -63,6 +64,7 @@ function build(): Graph {
     degree[a]++;
     degree[b]++;
   }
+  closeToCars(edgeA, edgeB, edgeFlags);
 
   // Prefix sums turn degrees into each node's start offset.
   const adjStart = new Int32Array(nodeCount + 1);
@@ -81,6 +83,25 @@ function build(): Graph {
   }
 
   return { nodeCount, lat, lng, edgeCount, edgeA, edgeB, edgeFlags, edgeLength, edgeName, edgeKind, adjStart, adjTarget, adjEdge, adjDir };
+}
+
+const NO_CAR = ~(CAR | CAR_FORWARD_ONLY | CAR_BACKWARD_ONLY) & 0xff;
+
+/** Applies CAR_CLOSURES: roads that can't really be driven through stay open on foot and by bike. */
+function closeToCars(edgeA: Int32Array, edgeB: Int32Array, edgeFlags: Uint8Array) {
+  const key = (n: number) => `${raw.nodes[2 * n]},${raw.nodes[2 * n + 1]}`;
+  const closed = new Set<string>();
+  for (const c of CAR_CLOSURES) {
+    for (let i = 0; i + 1 < c.points.length; i++) {
+      const p = c.points[i].join(',');
+      const q = c.points[i + 1].join(',');
+      closed.add(`${p}|${q}`);
+      closed.add(`${q}|${p}`);
+    }
+  }
+  for (let e = 0; e < edgeA.length; e++) {
+    if (closed.has(`${key(edgeA[e])}|${key(edgeB[e])}`)) edgeFlags[e] &= NO_CAR;
+  }
 }
 
 let cached: Graph | undefined;

@@ -124,8 +124,10 @@ const styles = StyleSheet.create({
   },
   fieldCompact: { height: 40, paddingHorizontal: 12 },
   fieldFocused: { borderColor: colors.keaney },
-  input: { flex: 1, fontSize: 15, color: colors.text, outlineStyle: 'none' } as any,
-  inputCompact: { fontSize: 14 },
+  // 16 px or more: iPhone Safari zooms the whole page in when you tap a text
+  // box with smaller text, and leaves it zoomed (cut off at both edges).
+  input: { flex: 1, fontSize: 16, color: colors.text, outlineStyle: 'none' } as any,
+  inputCompact: { fontSize: 16 },
   dropdown: {
     position: 'absolute',
     top: '100%',
