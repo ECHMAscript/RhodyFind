@@ -30,3 +30,11 @@ export const shadow = {
 
 // Layout breakpoints that match the design mocks (mobile 390, laptop 1024, desktop 1440).
 export const breakpoints = { tablet: 768, laptop: 1024 };
+
+/**
+ * Style for a photo that fills its frame (pair with resizeMode="cover").
+ * StyleSheet.absoluteFill isn't enough on the web: there an Image takes the
+ * pixel size of its file, so a big photo shows only its top-left corner.
+ * Explicit 100% width and height override that.
+ */
+export const imageFill = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' } as const;

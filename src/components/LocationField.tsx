@@ -97,7 +97,7 @@ export function LocationField({
               style={({ hovered }: any) => [styles.row, (hovered || i === 0) && styles.rowHover]}
               onPress={() => choose(l)}
             >
-              <MaterialCommunityIcons name={CATEGORY_META[l.category].icon} size={16} color={colors.navy} />
+              <MaterialCommunityIcons name={l.icon ?? CATEGORY_META[l.category].icon} size={16} color={colors.navy} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle} numberOfLines={1}>{l.name}</Text>
                 <Text style={styles.rowSub} numberOfLines={1}>{l.subtitle}</Text>

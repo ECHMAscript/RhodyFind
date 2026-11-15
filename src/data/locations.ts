@@ -10,7 +10,8 @@ export type Category =
   | 'store'
   | 'recreation'
   | 'restroom'
-  | 'printing';
+  | 'printing'
+  | 'worship';
 
 export type IconName = ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -27,6 +28,8 @@ export type CampusLocation = {
   labelSide?: 'top' | 'bottom' | 'left' | 'right';
   /** For a restroom or printer: the id of the building it's in. */
   building?: string;
+  /** Map icon, when it should differ from the category's. */
+  icon?: IconName;
 };
 
 export const CATEGORY_META: Record<Category, { label: string; icon: IconName }> = {
@@ -39,6 +42,7 @@ export const CATEGORY_META: Record<Category, { label: string; icon: IconName }> 
   recreation: { label: 'Recreation', icon: 'basketball' },
   restroom: { label: 'Bathrooms', icon: 'human-male-female' },
   printing: { label: 'Printing', icon: 'printer' },
+  worship: { label: 'Places of worship', icon: 'hands-pray' },
 };
 
 /** The "See what's closest to you" tiles on the home page, in order. */
@@ -58,8 +62,10 @@ const BUILDINGS: CampusLocation[] = [
   // Landmarks / major areas
   { id: 'quad', name: 'The Quad', category: 'landmark', subtitle: 'Historic quadrangle', lat: 41.48635, lng: -71.52736, major: true },
   { id: 'memorial-union', name: 'Memorial Union', category: 'landmark', subtitle: 'Student center', lat: 41.48506, lng: -71.5299, major: true },
-  // Not mapped in OpenStreetMap; placed at the Memorial Union until its exact spot is confirmed.
-  { id: 'emporium', name: 'The Emporium', category: 'store', subtitle: 'Campus store · Memorial Union', lat: 41.48525, lng: -71.53012, major: true, labelSide: 'left' },
+  // The Kingston Emporium (Emporium Plaza): the shopping plaza at 99 Fortin
+  // Road, confirmed by the user's photo of its parking sign and by property
+  // listings. Pinned in the middle of the plaza.
+  { id: 'emporium', name: 'The Emporium', category: 'store', subtitle: 'Shopping plaza · 99 Fortin Rd', lat: 41.48592, lng: -71.52412, major: true },
   { id: 'welcome-center', name: 'Robert J. Higgins Welcome Center', category: 'landmark', subtitle: 'Visitor center & tours', lat: 41.48369, lng: -71.52556, major: true },
   { id: 'ryan-center', name: 'Ryan Center', category: 'recreation', subtitle: 'Arena & events', lat: 41.48779, lng: -71.53572, major: true },
   { id: 'meade-stadium', name: 'Meade Stadium', category: 'recreation', subtitle: 'Football stadium', lat: 41.48813, lng: -71.5346, major: true },
@@ -101,6 +107,11 @@ const BUILDINGS: CampusLocation[] = [
   { id: 'dunkin-union', name: "Dunkin' (Memorial Union)", category: 'dining', subtitle: 'Coffee', lat: 41.48551, lng: -71.52994 },
   { id: 'bru-ri', name: 'Bru RI Coffee Bar', category: 'dining', subtitle: 'Café · Kingston', lat: 41.48432, lng: -71.52353 },
   { id: 'kingston-pizza', name: 'Kingston Pizza', category: 'dining', subtitle: 'Restaurant · Kingston', lat: 41.48318, lng: -71.52383 },
+  // Placed from the user's in-person check (Nov 2026). Taste of Korea is in
+  // the unit OpenStreetMap still lists as Krazy Fusion Cafe; High 1 is in the
+  // building where OSM lists Albie's Place and Providence Bagel.
+  { id: 'taste-of-korea', name: 'Taste of Korea', category: 'dining', subtitle: 'Korean food & boba · 99 Fortin Rd', lat: 41.48572, lng: -71.52371 },
+  { id: 'high-1', name: 'High 1', category: 'dining', subtitle: 'Pizza, gelato & more · Fortin Rd', lat: 41.48558, lng: -71.52452 },
 
   // Parking
   { id: 'ram-lot', name: 'Ram Lot', category: 'parking', subtitle: 'Parking', lat: 41.48863, lng: -71.53634 },
@@ -115,6 +126,9 @@ const BUILDINGS: CampusLocation[] = [
   { id: 'kingston-mart', name: 'Kingston Mart', category: 'store', subtitle: 'Grocery', lat: 41.48494, lng: -71.52437 },
   { id: 'cvs', name: 'CVS Pharmacy', category: 'store', subtitle: 'Pharmacy', lat: 41.48539, lng: -71.52393 },
   { id: 'post-office', name: 'U.S. Post Office', category: 'store', subtitle: 'Kingston post office', lat: 41.48339, lng: -71.52511 },
+
+  // Places of worship
+  { id: 'masjid-al-huda', name: 'Masjid Al-Huda', category: 'worship', subtitle: 'Mosque · 60 Fortin Rd', lat: 41.4847, lng: -71.52386, icon: 'mosque' },
 
   // Recreation
   { id: 'anna-fascitelli', name: 'Anna Fascitelli Fitness and Wellness Center', category: 'recreation', subtitle: 'Gym', lat: 41.48736, lng: -71.53239 },

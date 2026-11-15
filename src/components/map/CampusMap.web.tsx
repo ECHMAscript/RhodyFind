@@ -66,7 +66,7 @@ const PlaceMarker = memo(function PlaceMarker({
   return (
     <Marker
       position={position}
-      icon={badgeIcon(CATEGORY_META[place.category].icon, !!place.major)}
+      icon={badgeIcon(place.icon ?? CATEGORY_META[place.category].icon, !!place.major)}
       eventHandlers={handlers}
       zIndexOffset={place.major && !dimmed ? 100 : 0}
       opacity={dimmed ? 0.4 : 1}

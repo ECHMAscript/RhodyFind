@@ -1,5 +1,5 @@
 import type { ImageSourcePropType } from 'react-native';
-import { RESTROOMS } from './locations';
+import { LOCATION_BY_ID, RESTROOMS } from './locations';
 import { PHOTOS, type Photo } from './photos';
 
 /**
@@ -29,6 +29,12 @@ export type PlaceDetails = {
   photoCreditUrl?: string;
   /** Where to see a photo when the app can't show one (no license to copy it). */
   photoLink?: { label: string; url: string };
+  /** More photos, shown as a strip under the main one (inside the place, the menu, ...). */
+  gallery?: { source: ImageSourcePropType; caption: string }[];
+  /** For businesses and services. */
+  hours?: string;
+  phone?: string;
+  website?: string;
   /** Where each fact came from; `url` is left out for things checked in person. */
   sources: { label: string; url?: string }[];
 };
@@ -57,10 +63,93 @@ const HOPE_COMMONS_NEWS = {
   url: 'https://www.foodservicedirector.com/colleges-universities/the-university-of-rhode-island-has-opened-its-23-million-hope-commons-dining-center-prompting-long-lines-that-have-reduced-at-least-temporarily-the-participation-at-the-campuss-dozen-other-dining-outlets',
 };
 const OSM = { label: 'OpenStreetMap (address)', url: 'https://www.openstreetmap.org/' };
+// Photos and facts from the RhodyFind team's own visits.
+const IN_PERSON_VISIT = { label: 'Visited by the RhodyFind team (Nov 2026): photos' };
 // Facts the RhodyFind team checked by visiting the building.
 const IN_PERSON = { label: 'Checked in person by the RhodyFind team (Nov 2026): floors, bathrooms, elevator' };
 
 export const PLACE_DETAILS: Record<string, PlaceDetails> = {
+  // ------------------------------------------- Fortin Road (checked in person)
+  'taste-of-korea': {
+    about:
+      'Taste of Korea is a casual Korean restaurant in the Emporium plaza on Fortin Road, steps from campus. A neon ' +
+      'sign in its window advertises boba tea alongside the food.',
+    address: '99 Fortin Road, Suite 104, Kingston, RI 02881',
+    phone: '401-363-9777',
+    highlights: [
+      'Boba tea (sign in the window)',
+      'Rated 4.9 from 200+ reviews on the Caviar delivery app',
+      'The same phone number and suite were previously listed for Krazy Fusion Cafe, which older maps still show here',
+    ],
+    photo: require('../../assets/places/taste-of-korea-front.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    gallery: [
+      { source: require('../../assets/places/taste-of-korea-front.webp'), caption: 'Storefront on Fortin Road' },
+      { source: require('../../assets/places/taste-of-korea-entrance.webp'), caption: 'Entrance (Suite 104)' },
+    ],
+    sources: [
+      IN_PERSON_VISIT,
+      { label: 'Visit Rhode Island: Krazy Fusion Cafe (same address and phone)', url: 'https://www.visitrhodeisland.com/listing/krazy-fusion-cafe/3601/' },
+      { label: 'Caviar: Korean food in Kingston', url: 'https://www.trycaviar.com/en/food-delivery/kingston-ri-restaurants/korean' },
+    ],
+  },
+  'high-1': {
+    about:
+      'High 1 ("love at first slice") is a family-owned pizzeria in the Kingston Emporium plaza, next door to Albie’s. ' +
+      'Besides pizza by the pie or slice it makes calzones, pastas, homemade gelato, açaí and fruit bowls, Nutella ' +
+      'desserts and Nordic waffles. Order at the counter or a self-serve kiosk and eat at the long window counter.',
+    address: 'Kingston Emporium plaza, Fortin Road, Kingston, RI 02881',
+    hours: 'Sun–Thu 11 a.m.–midnight; Fri–Sat 11 a.m.–2 a.m. (menu board, Nov 2026)',
+    phone: '(401) 284-3050',
+    website: 'https://www.high1uri.com',
+    highlights: [
+      'Pizza by the slice, plus a slice-and-soda deal',
+      'Homemade gelato, açaí bowls and Nutella treats',
+      'Order online at high1uri.com',
+      'The plaza lot is for Kingston Emporium customers only (sign outside)',
+    ],
+    photo: require('../../assets/places/high-1-front.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    gallery: [
+      { source: require('../../assets/places/high-1-front.webp'), caption: 'Storefront' },
+      { source: require('../../assets/places/high-1-counter.webp'), caption: 'Order counter and gelato case' },
+      { source: require('../../assets/places/high-1-menu.webp'), caption: 'Menu board' },
+      { source: require('../../assets/places/high-1-seating.webp'), caption: 'Window counter seating' },
+    ],
+    sources: [
+      { ...IN_PERSON_VISIT, label: 'Visited by the RhodyFind team (Nov 2026): photos, menu board, hours and phone' },
+      { label: 'DoorDash: High 1', url: 'https://page-service.doordash.com/en-GB/store/high-1-24693498' },
+      { label: 'High 1 website', url: 'https://www.high1uri.com' },
+    ],
+  },
+  'masjid-al-huda': {
+    about:
+      'Masjid Al-Huda (also written Al-Hoda) is the mosque serving Rhode Island’s Muslim community and the URI ' +
+      'community. It holds daily congregational prayers and Friday Jumu’ah, study circles and lectures, a weekly ' +
+      'social gathering with a free lunch, Sunday school for children and holiday celebrations, and works with the ' +
+      'URI Muslim Student Association.',
+    address: '60 Fortin Road, Kingston, RI 02881',
+    hours: 'Friday (Jumu’ah): service 1:00 p.m., prayer 1:30 p.m.; in winter 12:30 and 1:00 p.m.',
+    phone: '(401) 400-9943',
+    website: 'https://masjidalhoda.org',
+    highlights: [
+      'Daily congregational prayers',
+      'Sunday school for children, 10 a.m.–2 p.m.',
+      'Community picnic on the second Saturday of each month',
+      'URI’s Muslim chaplain can be reached through URI Chaplains',
+    ],
+    photo: require('../../assets/places/masjid-al-huda-entrance.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    gallery: [
+      { source: require('../../assets/places/masjid-al-huda-entrance.webp'), caption: 'Entrance' },
+      { source: require('../../assets/places/masjid-al-huda-prayer-hall.webp'), caption: 'Prayer hall' },
+    ],
+    sources: [
+      IN_PERSON_VISIT,
+      { label: 'URI Chaplains: Muslim Center (Masjid Al-Hoda)', url: 'https://web.uri.edu/chaplains/muslim-center/' },
+      { label: 'Rhode Island College: Places of Worship (phone)', url: 'https://w3.ric.edu/interfaithservices/Pages/Places-of-Worship.aspx' },
+    ],
+  },
   // ---------------------------------------------------------------- Landmarks
   quad: {
     about:
@@ -100,18 +189,26 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
   },
   emporium: {
     about:
-      'The Emporium is in the Memorial Union. An older third-party guide describes it as a food-court-style area whose ' +
-      'eateries include a Dunkin’ café. URI’s own pages don’t use the name, so its exact spot inside the Union isn’t ' +
-      'confirmed; the URI Campus Store is on the Union’s first floor.',
-    address: 'Memorial Union, 50 Lower College Road, Kingston, RI 02881',
-    accessibility: 'Elevators connect all floors of the Memorial Union (Critique Access review)',
+      'The Emporium (the Kingston Emporium, or Emporium Plaza) is the shopping plaza on Fortin Road right next to ' +
+      'campus, and a go-to spot for food. Its restaurants and shops include Taste of Korea, High 1, Albie\u2019s Place, ' +
+      'Providence Bagel, Subway, Simply Thai and Caliente Mexican Grill, plus a CVS Pharmacy and the iCopy print shop.',
+    address: '99 Fortin Road, Kingston, RI 02881',
+    highlights: [
+      'The plaza\u2019s parking lot is for Emporium customers only; unauthorized cars may be towed (sign in the lot)',
+      'A short walk from the Memorial Union and the Quad',
+    ],
+    photo: require('../../assets/places/high-1-seating.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    gallery: [
+      { source: require('../../assets/places/high-1-seating.webp'), caption: 'The plaza and its lot, seen from High 1' },
+      { source: require('../../assets/places/high-1-front.webp'), caption: 'High 1, with Albie\u2019s next door' },
+      { source: require('../../assets/places/taste-of-korea-front.webp'), caption: 'Taste of Korea' },
+    ],
     sources: [
-      {
-        label: 'Journeum: Kingston places to eat (third-party guide)',
-        url: 'https://journeum.com/dst/North%20America/USA/New%20England/Rhode%20Island/South%20County/South%20Kingstown/Kingston/Eat',
-      },
-      MU_DINE_AND_SHOP,
-      CRITIQUE_ACCESS,
+      { ...IN_PERSON_VISIT, label: 'Visited by the RhodyFind team (Nov 2026): photos and the plaza parking sign' },
+      { label: 'CIMLS: 99 Fortin Road, \u201cinside the Emporium Plaza\u201d', url: 'https://www.cimls.com/sale-listing/957236' },
+      { label: 'LoopNet: 100 Fortin Rd, \u201cacross from the URI Emporium\u201d', url: 'https://www.loopnet.com/Listing/100-Fortin-Rd-Kingston-RI/38507550' },
+      { label: 'OpenStreetMap (shops and restaurants in the plaza)', url: 'https://www.openstreetmap.org/' },
     ],
   },
   'welcome-center': {
@@ -708,4 +805,15 @@ for (const [id, photo] of Object.entries(BUILDING_PHOTOS)) {
   d.photo = photo.source;
   d.photoCredit = `Photo: ${photo.credit}${id === 'edwards' ? ' · Edwards Hall in 1928' : ''}`;
   d.photoCreditUrl = photo.url;
+}
+
+/**
+ * The photo to show for a place in lists: its own, or for a restroom or
+ * printer, the photo of the building it's in.
+ */
+export function placePhoto(id: string): ImageSourcePropType | undefined {
+  const own = PLACE_DETAILS[id]?.photo;
+  if (own) return own;
+  const building = LOCATION_BY_ID[id]?.building;
+  return building ? PLACE_DETAILS[building]?.photo : undefined;
 }

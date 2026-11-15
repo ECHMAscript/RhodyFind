@@ -8,13 +8,15 @@ import { LocationField } from '@/components/LocationField';
 import { TravelModes } from '@/components/TravelModes';
 import { CATEGORY_META, QUICK_CATEGORIES, type Category, type IconName } from '@/data/locations';
 import { PHOTOS, type Photo } from '@/data/photos';
+import { placePhoto } from '@/data/placeDetails';
+import { PlaceThumb } from '@/components/PlaceThumb';
 import { currentPosition, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import { formatMiles, TRAVEL_MODES, type TravelMode } from '@/lib/geo';
 import { findNearestByRoute } from '@/lib/nearestByRoute';
 import { findRoute, type Route } from '@/lib/routing/router';
 import { offCampusDistance } from '@/lib/campus';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
-import { breakpoints, colors, radius, shadow } from '@/theme';
+import { breakpoints, colors, imageFill, radius, shadow } from '@/theme';
 
 function openMap(from: Endpoint | undefined, to: Endpoint, mode: TravelMode) {
   router.push({
@@ -110,6 +112,8 @@ export default function Home() {
   };
 
   const photo = CATEGORY_PHOTO[category];
+  // The closest place's own photo when it has one, else one for the category.
+  const resultPhoto = (closest && placePhoto(closest.location.id)) ?? photo?.source;
 
   return (
     <View style={styles.screen}>
@@ -246,8 +250,10 @@ export default function Home() {
             ) : closest ? (
               <>
                 <Pressable style={styles.routeInfo} onPress={() => openMap(origin, fromLocation(closest.location), mode)}>
-                  {photo ? (
-                    <Image source={photo.source} style={styles.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
+                  {resultPhoto ? (
+                    <View style={[styles.thumb, styles.thumbFrame]}>
+                      <Image source={resultPhoto} style={imageFill} resizeMode="cover" accessibilityIgnoresInvertColors />
+                    </View>
                   ) : (
                     <View style={[styles.thumb, styles.thumbIcon]}>
                       <MaterialCommunityIcons name={meta.icon} size={30} color={colors.white} />
@@ -300,7 +306,7 @@ export default function Home() {
                   style={({ hovered }: any) => [styles.listRow, hovered && { backgroundColor: colors.keaneyTint }]}
                   onPress={() => openMap(origin, fromLocation(location), mode)}
                 >
-                  <MaterialCommunityIcons name={CATEGORY_META[location.category].icon} size={18} color={colors.navy} />
+                  <PlaceThumb place={location} size={44} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.rowTitle}>{location.name}</Text>
                     <Text style={styles.rowSub}>{location.subtitle}</Text>
@@ -327,7 +333,7 @@ export default function Home() {
                   accessibilityLabel={`Learn more about ${p.name}`}
                 >
                   <View style={styles.photoImg}>
-                    <Image source={p.photo.source} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    <Image source={p.photo.source} style={imageFill} resizeMode="cover" />
                   </View>
                   <View style={styles.photoBody}>
                     <Text style={styles.photoName}>{p.name}</Text>
@@ -407,6 +413,7 @@ const styles = StyleSheet.create({
   routeCardMobile: { padding: 12 },
   routeInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 14 },
   thumb: { width: 84, height: 64, borderRadius: radius.md, backgroundColor: colors.keaneyTint },
+  thumbFrame: { overflow: 'hidden' },
   thumbIcon: { backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
   routeEyebrow: { fontSize: 12, color: colors.textMuted },
   routeTitle: { fontSize: 17, fontWeight: '700', color: colors.navy, marginTop: 1 },

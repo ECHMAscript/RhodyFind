@@ -82,7 +82,7 @@ export const CampusMap = memo(function CampusMap({
         >
           <View style={[styles.badge, p.major && styles.badgeMajor]}>
             <MaterialCommunityIcons
-              name={CATEGORY_META[p.category].icon}
+              name={p.icon ?? CATEGORY_META[p.category].icon}
               size={p.major ? 20 : 16}
               color={p.major ? colors.white : colors.navy}
             />

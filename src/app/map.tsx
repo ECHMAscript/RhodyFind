@@ -3,12 +3,13 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BottomSheet, SHEET_HANDLE_HEIGHT, sheetPeekHeight } from '@/components/BottomSheet';
+import { PlaceThumb } from '@/components/PlaceThumb';
 import { Header } from '@/components/Header';
 import { LocationField } from '@/components/LocationField';
 import { NavigationPanel } from '@/components/NavigationPanel';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
-import { CATEGORY_META, LOCATION_BY_ID, PLACES, type CampusLocation } from '@/data/locations';
+import { LOCATION_BY_ID, PLACES, type CampusLocation } from '@/data/locations';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
@@ -363,7 +364,9 @@ export default function MapScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.learnMoreTitle}>Learn more about {aboutPlace.name}</Text>
             <Text style={styles.learnMoreSub} numberOfLines={1}>
-              Photo, floors, bathrooms and more
+              {['dining', 'store', 'worship'].includes(aboutPlace.category)
+                ? 'Photos, hours, phone and more'
+                : 'Photo, floors, bathrooms and more'}
             </Text>
           </View>
           <MaterialCommunityIcons name="chevron-right" size={22} color={colors.navy} />
@@ -421,7 +424,7 @@ export default function MapScreen() {
               style={({ hovered }: any) => [styles.nearRow, hovered && { backgroundColor: colors.keaneyTint }]}
               onPress={() => setTo(fromLocation(location))}
             >
-              <MaterialCommunityIcons name={CATEGORY_META[location.category].icon} size={18} color={colors.navy} />
+              <PlaceThumb place={location} size={40} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.nearTitle} numberOfLines={1}>{location.name}</Text>
                 <Text style={styles.nearSub}>{location.subtitle}</Text>
