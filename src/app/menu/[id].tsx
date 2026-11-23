@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import {
+  Animated,
   Image,
+  PanResponder,
   Linking,
   Platform,
   Pressable,
@@ -427,22 +429,59 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
   const [shown, setShown] = useState(0);
   const [paused, setPaused] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  // Restarts whenever the card changes, so a swipe gets a full 6 s before
+  // the next automatic turn.
   useEffect(() => {
     if (paused || items.length < 2) return;
-    const t = setInterval(() => setShown((n) => (n + 1) % items.length), 6000);
-    return () => clearInterval(t);
-  }, [paused, items.length]);
+    const t = setTimeout(() => setShown((n) => (n + 1) % items.length), 6000);
+    return () => clearTimeout(t);
+  }, [paused, items.length, shown]);
+
+  // Swipe left for the next card, right for the previous one. The content
+  // follows the finger, then slides in from the side it was pushed toward.
+  const [dragX] = useState(() => new Animated.Value(0));
+  const swipe = useMemo(() => {
+    const settle = () => Animated.spring(dragX, { toValue: 0, useNativeDriver: false, bounciness: 4 }).start();
+    return PanResponder.create({
+      // Only take over clearly sideways moves, so the page still scrolls up and down.
+      onMoveShouldSetPanResponder: (_e, g) => items.length > 1 && Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+      onPanResponderGrant: () => setPaused(true),
+      onPanResponderMove: (_e, g) => dragX.setValue(g.dx * 0.6),
+      onPanResponderRelease: (_e, g) => {
+        setPaused(false);
+        const dir = g.dx < -50 || g.vx < -0.4 ? 1 : g.dx > 50 || g.vx > 0.4 ? -1 : 0;
+        if (dir) {
+          setShown((n) => (n + dir + items.length) % items.length);
+          dragX.setValue(dir * 70);
+        }
+        settle();
+      },
+      onPanResponderTerminate: () => {
+        setPaused(false);
+        settle();
+      },
+    });
+  }, [dragX, items.length]);
+  const fade = dragX.interpolate({ inputRange: [-120, 0, 120], outputRange: [0.35, 1, 0.35], extrapolate: 'clamp' });
+
   const i = shown % items.length;
   const f = items[i];
   const first = itemOptions(f.item, f.section)[0];
   return (
     <View
-      style={[styles.featured, style]}
-      // Hovering (web) pauses the rotation so it doesn't change under the pointer.
+      style={[styles.featured, style, styles.swipeable]}
+      {...swipe.panHandlers}
+      // A finger on the card (phones) or the pointer over it (web) pauses the
+      // rotation, so it can't change just as you tap Add.
+      onTouchStart={() => setPaused(true)}
+      onTouchEnd={() => setPaused(false)}
+      onTouchCancel={() => setPaused(false)}
       {...({ onMouseEnter: () => setPaused(true), onMouseLeave: () => setPaused(false) } as object)}
     >
       <LinearGradient colors={[colors.navy, '#0D3470']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      <View style={[styles.featuredInner, compact && styles.featuredInnerCompact]}>
+      <Animated.View
+        style={[styles.featuredInner, compact && styles.featuredInnerCompact, { opacity: fade, transform: [{ translateX: dragX }] }]}
+      >
         <View style={[styles.neonRing, compact && styles.neonRingCompact]}>
           <MaterialCommunityIcons name={f.section.icon} size={compact ? 44 : 62} color={colors.white} style={styles.neonIcon} />
         </View>
@@ -475,7 +514,7 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
             </View>
           )}
         </View>
-      </View>
+      </Animated.View>
       <View style={styles.dots}>
         {items.map((it, n) => (
           <Pressable
@@ -842,6 +881,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.5)',
   },
   featuredAddText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+  // Web: let the browser keep vertical scrolling, and hand sideways drags to the swipe.
+  swipeable: Platform.OS === 'web' ? ({ touchAction: 'pan-y', userSelect: 'none' } as object) : {},
   dots: { position: 'absolute', right: 22, bottom: 14, flexDirection: 'row', gap: 8 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.45)' },
   dotOn: { backgroundColor: PINK_GLOW, width: 22 },
