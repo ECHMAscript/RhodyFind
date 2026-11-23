@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import * as Location from 'expo-location';
-import { bearingDeg, haversineMeters, type LatLng } from './geo';
+import { haversineMeters, type LatLng } from './geo';
+import { createHeadingFilter } from './heading';
 
 export type LiveFix = {
   position: LatLng;
@@ -17,9 +18,6 @@ export type LiveFix = {
   receivedAt: number;
 };
 
-// Below this much movement, a bearing between two fixes is mostly GPS noise.
-const HEADING_MIN_MOVE_M = 3;
-
 /**
  * Streams the device position as fast as the device reports it, while
  * `enabled` is true. Phones produce about one GPS fix per second, whatever is
@@ -28,15 +26,14 @@ const HEADING_MIN_MOVE_M = 3;
 export function useWatchPosition(enabled: boolean) {
   const [fix, setFix] = useState<LiveFix>();
   const [error, setError] = useState<string>();
-  const lastForHeading = useRef<LatLng | undefined>(undefined);
-  const lastHeading = useRef<number | undefined>(undefined);
+  // Steady direction of travel from noisy fixes (lib/heading.ts).
+  const [headingFilter] = useState(createHeadingFilter);
   const lastFix = useRef<{ position: LatLng; time: number } | undefined>(undefined);
 
   useEffect(() => {
     if (!enabled) {
       lastFix.current = undefined;
-      lastForHeading.current = undefined;
-      lastHeading.current = undefined;
+      headingFilter.reset();
       return;
     }
     let cancelled = false;
@@ -54,16 +51,9 @@ export function useWatchPosition(enabled: boolean) {
     ) => {
       if (cancelled) return;
       const position = { lat, lng };
-      // Prefer the device's own heading while moving; otherwise derive it from movement.
-      if (heading != null && heading >= 0 && !Number.isNaN(heading) && (speed ?? 0) > 0.5) {
-        lastHeading.current = heading;
-        lastForHeading.current = position;
-      } else if (!lastForHeading.current) {
-        lastForHeading.current = position;
-      } else if (haversineMeters(lastForHeading.current, position) >= HEADING_MIN_MOVE_M) {
-        lastHeading.current = bearingDeg(lastForHeading.current, position);
-        lastForHeading.current = position;
-      }
+      // The device's own course when moving, else fitted from recent fixes;
+      // a single stray fix can't flip it.
+      const direction = headingFilter.update(position, time, heading, speed);
       // The device's speed if it gives one, else distance over time since the last fix.
       let metersPerSecond = speed != null && speed >= 0 && !Number.isNaN(speed) ? speed : undefined;
       const prev = lastFix.current;
@@ -75,7 +65,7 @@ export function useWatchPosition(enabled: boolean) {
       setFix({
         position,
         accuracy: accuracy ?? 20,
-        heading: lastHeading.current,
+        heading: direction,
         speed: metersPerSecond,
         time,
         receivedAt: Date.now(),
@@ -120,7 +110,7 @@ export function useWatchPosition(enabled: boolean) {
       sub?.remove();
       setFix(undefined);
     };
-  }, [enabled]);
+  }, [enabled, headingFilter]);
 
   return { fix, error };
 }

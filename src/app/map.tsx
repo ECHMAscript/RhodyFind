@@ -14,6 +14,7 @@ import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
   arrivalTime,
+  bearingDeg,
   cumulativeMeters,
   distanceToPathMeters,
   formatMiles,
@@ -25,6 +26,7 @@ import {
 import { buildSteps } from '@/lib/routing/directions';
 import { findRoute, type Route } from '@/lib/routing/router';
 import { findNearest } from '@/lib/search';
+import { angleDelta } from '@/lib/heading';
 import { offCampusDistance } from '@/lib/campus';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
@@ -33,6 +35,10 @@ import { breakpoints, colors, radius, shadow } from '@/theme';
 // How far the phone layout's panel overlaps the bottom of the map (its marginTop).
 const PANEL_OVERLAP = 20;
 const OFF_ROUTE_METERS = 30;
+// The arrow follows the route toward a point this far ahead...
+const ROUTE_HEADING_LOOKAHEAD_M = 8;
+// ...unless the GPS direction disagrees by more than this (walking the wrong way).
+const WRONG_WAY_DEG = 75;
 // Arrived when this close along the route...
 const ARRIVED_METERS = 20;
 // ...or this close to the destination itself, in a straight line.
@@ -236,6 +242,21 @@ export default function MapScreen() {
   };
 
   const live = navigating && following && onRoute && !!track;
+
+  // While on the route, the arrow points along it: from the user's spot on
+  // the route toward a point ~8 m further on (so it turns as a corner nears).
+  // GPS direction alone wobbles; if it clearly disagrees (the user is walking
+  // the other way), show what they're really doing.
+  const shownFix = useMemo(() => {
+    if (!fix || !live || !track || !activeRoute) return fix;
+    const c = activeRoute.coords;
+    let j = Math.min(track.segment + 1, c.length - 1);
+    while (j < c.length - 1 && haversineMeters(track.point, c[j]) < ROUTE_HEADING_LOOKAHEAD_M) j++;
+    if (haversineMeters(track.point, c[j]) < 1) return fix; // at the very end
+    const along = bearingDeg(track.point, c[j]);
+    if (fix.heading !== undefined && Math.abs(angleDelta(fix.heading, along)) > WRONG_WAY_DEG) return fix;
+    return { ...fix, heading: along };
+  }, [fix, live, track, activeRoute]);
   // While tracking, draw only the route from the user's current segment on.
   // Cutting at a vertex (not at the 1-per-second GPS point) keeps the line
   // still under the smoothly gliding dot instead of jumping each second, and
@@ -485,7 +506,7 @@ export default function MapScreen() {
       onPlacePress={onPlacePress}
       route={routeShown}
       highlight={highlight}
-      userFix={farAway ? undefined : fix}
+      userFix={farAway ? undefined : shownFix}
       trimRouteToUser={live}
       follow={follow}
       fitTo={fitTo}

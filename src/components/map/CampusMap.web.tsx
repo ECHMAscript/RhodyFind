@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
 import { colors } from '@/theme';
 import { haversineMeters, type LatLng } from '@/lib/geo';
+import { angleDelta } from '@/lib/heading';
 import { predictPosition, smoothToward } from '@/lib/motion';
 import type { LiveFix } from '@/lib/useWatchPosition';
 import type { CampusMapProps } from './types';
@@ -187,12 +188,20 @@ function LiveUser({
     insetRef.current = bottomInset;
   }, [bottomInset]);
 
-  // Rotate the heading arrow in place instead of building a new icon.
+  // Rotate the heading arrow in place instead of building a new icon. The
+  // angle keeps counting past 360 so the CSS transition always turns the short
+  // way: 350 -> 10 degrees is a 20-degree turn, not a 340-degree spin that
+  // points backwards on the way.
+  const arrowAngle = useRef<number | undefined>(undefined);
   useEffect(() => {
     const arrow = markerRef.current?.getElement()?.querySelector<HTMLElement>('.rf-heading');
     if (!arrow) return;
     arrow.style.display = fix.heading === undefined ? 'none' : 'block';
-    if (fix.heading !== undefined) arrow.style.transform = `rotate(${fix.heading}deg)`;
+    if (fix.heading === undefined) return;
+    const prev = arrowAngle.current;
+    const next = prev === undefined ? fix.heading : prev + angleDelta(prev, fix.heading);
+    arrowAngle.current = next;
+    arrow.style.transform = `rotate(${next}deg)`;
   }, [fix.heading]);
 
   useEffect(() => {
