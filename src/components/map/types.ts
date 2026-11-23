@@ -25,6 +25,8 @@ export type CampusMapProps = {
    * on phones). The camera keeps the user and fitted routes above it.
    */
   bottomInset?: number;
+  /** Outline and color every parking lot around campus, with the listed lots' names shown. */
+  showParking?: boolean;
   /** Navigating on the route: cut the drawn route at the moving dot, every frame (web). */
   trimRouteToUser?: boolean;
 };

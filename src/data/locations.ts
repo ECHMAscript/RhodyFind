@@ -120,6 +120,11 @@ const BUILDINGS: CampusLocation[] = [
   { id: 'plains-lot', name: 'Plains Road Lot', category: 'parking', subtitle: 'Commuter parking', lat: 41.49063, lng: -71.53883 },
   { id: 'flagg-lot', name: 'Flagg Road Lot', category: 'parking', subtitle: 'Parking', lat: 41.49195, lng: -71.53442 },
   { id: 'fine-arts-lot', name: 'Fine Arts Lot', category: 'parking', subtitle: 'Parking', lat: 41.48759, lng: -71.52231 },
+  // The Emporium's two lots, outlined in OpenStreetMap: the customer lot in
+  // the plaza, and the paid lot (run by PMC) just north of it. Pinned inside
+  // each, clear of the restaurant pins.
+  { id: 'emporium-lot', name: 'Emporium Customer Lot', category: 'parking', subtitle: 'Emporium customers only', lat: 41.48605, lng: -71.52475, labelSide: 'right' },
+  { id: 'emporium-paid-lot', name: 'Emporium Paid Lot', category: 'parking', subtitle: 'Paid hourly · from $9', lat: 41.48648, lng: -71.5247, labelSide: 'left' },
   { id: 'briar-lane-lot', name: 'Briar Lane Lot', category: 'parking', subtitle: 'Parking', lat: 41.48392, lng: -71.52473 },
 
   // Stores

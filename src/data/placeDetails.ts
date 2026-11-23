@@ -1,5 +1,6 @@
 import type { ImageSourcePropType } from 'react-native';
 import { LOCATION_BY_ID, RESTROOMS } from './locations';
+import type { ParkingInfo } from './parking';
 import { PHOTOS, type Photo } from './photos';
 
 /**
@@ -35,6 +36,8 @@ export type PlaceDetails = {
   hours?: string;
   phone?: string;
   website?: string;
+  /** For a parking lot: who can park, rates and how to pay. */
+  parking?: ParkingInfo;
   /** Where each fact came from; `url` is left out for things checked in person. */
   sources: { label: string; url?: string }[];
 };
@@ -64,6 +67,10 @@ const HOPE_COMMONS_NEWS = {
 };
 const OSM = { label: 'OpenStreetMap (address)', url: 'https://www.openstreetmap.org/' };
 // Photos and facts from the RhodyFind team's own visits.
+const URI_EMPORIUM_PARKING = {
+  label: 'URI News: Parking in Emporium lots discouraged (Sept. 2025)',
+  url: 'https://www.uri.edu/news/2025/09/parking-in-emporium-lots-discouraged-2/',
+};
 const IN_PERSON_VISIT = { label: 'Visited by the RhodyFind team (Nov 2026): photos' };
 // Facts the RhodyFind team checked by visiting the building.
 const IN_PERSON = { label: 'Checked in person by the RhodyFind team (Nov 2026): floors, bathrooms, elevator' };
@@ -228,7 +235,8 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       'Providence Bagel, Subway, Simply Thai and Caliente Mexican Grill, plus a CVS Pharmacy and the iCopy print shop.',
     address: '99 Fortin Road, Kingston, RI 02881',
     highlights: [
-      'The plaza\u2019s parking lot is for Emporium customers only; unauthorized cars may be towed (sign in the lot)',
+      'Two lots: a customer lot in the plaza (Emporium customers only) and a paid lot just north of it, $9 for the first hour',
+      'URI parking permits aren\u2019t valid in either lot; cars parked without paying or shopping can be ticketed or towed',
       'A short walk from the Memorial Union and the Quad',
     ],
     photo: require('../../assets/places/high-1-seating.webp'),
@@ -243,6 +251,80 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       { label: 'CIMLS: 99 Fortin Road, \u201cinside the Emporium Plaza\u201d', url: 'https://www.cimls.com/sale-listing/957236' },
       { label: 'LoopNet: 100 Fortin Rd, \u201cacross from the URI Emporium\u201d', url: 'https://www.loopnet.com/Listing/100-Fortin-Rd-Kingston-RI/38507550' },
       { label: 'OpenStreetMap (shops and restaurants in the plaza)', url: 'https://www.openstreetmap.org/' },
+      URI_EMPORIUM_PARKING,
+    ],
+  },
+  'emporium-lot': {
+    about:
+      'The parking lot in the middle of the Kingston Emporium plaza, in front of its restaurants and shops (Albie\u2019s, ' +
+      'High 1, Taste of Korea, CVS and the rest). It\u2019s for Emporium customers while they shop or eat. If you\u2019re ' +
+      'parking to go to class or an event, use the paid lot next door or a URI lot instead.',
+    address: '99 Fortin Road (Kingston Emporium), Kingston, RI 02881',
+    parking: {
+      access: 'Emporium customers only, while at the plaza',
+      rules: [
+        'The sign in the lot says it\u2019s for Kingston Emporium customers only; other cars may be towed.',
+        'URI parking permits don\u2019t cover this lot. URI says cars without an Emporium permit risk being ticketed or towed.',
+        'Towed? URI says to call Express Towing at 401-732-1000.',
+      ],
+    },
+    photo: require('../../assets/places/high-1-seating.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    sources: [
+      { ...IN_PERSON_VISIT, label: 'Visited by the RhodyFind team (Nov 2026): the customers-only sign in the lot' },
+      URI_EMPORIUM_PARKING,
+      { label: 'OpenStreetMap: lot outline (customers only)', url: 'https://www.openstreetmap.org/way/28789452' },
+    ],
+  },
+  'emporium-paid-lot': {
+    about:
+      'A paid lot run by PMC (Parking Management Company) right beside the Kingston Emporium, on the north side of the ' +
+      'plaza. Anyone can park here, shopping or not: you pay by the hour from your phone, and your license plate is your ' +
+      'ticket.',
+    address: '99 Fortin Road (Kingston Emporium), Kingston, RI 02881',
+    hours: 'Open 24 hours (PMC)',
+    website: 'https://parkingmgt.com/lot/99-fortin-rd-kingston/',
+    parking: {
+      access: 'Anyone, paid by the hour',
+      operator: 'PMC (Parking Management Company)',
+      spaces: 156,
+      // PMC's rate table for this lot (fixed-time options in cents, a service
+      // charge of the greater of $2.75 or 10%, and 7% RI sales tax on both),
+      // read from its checkout on Nov 23, 2026. Totals match its 2-hour quote.
+      rates: [
+        { label: '1 hour', price: 9, total: 12.57 },
+        { label: '2 hours', price: 12, total: 15.78 },
+        { label: '3 hours', price: 15, total: 18.99 },
+        { label: '4 hours', price: 17, total: 21.13 },
+        { label: '8 hours', price: 20, total: 24.34 },
+      ],
+      rateNotes: [
+        'PMC adds a $2.75 service fee (or 10% if that\u2019s more) and 7% Rhode Island sales tax; \u201cwith fees\u201d is what you actually pay.',
+        'PMC lists these rates for Monday to Friday and showed no weekend rate, so check the sign on weekends. Its system can change prices, so check the total at checkout.',
+      ],
+      payment: [
+        'Park, then find a PMC sign in the lot.',
+        'Scan the sign\u2019s QR code, or text the number on the sign. No app to download.',
+        'Enter your license plate carefully: it\u2019s your pass, so there\u2019s nothing to print or put on the dashboard.',
+        'Choose how long, then pay with a credit card, Apple Pay or Google Pay.',
+        'PMC texts you before your time runs out, with a link to add more, and texts a receipt when you\u2019re done.',
+      ],
+      payUrl: 'https://go.parkingmgt.com/dH4DES',
+      rules: [
+        'Pay as soon as you park. PMC\u2019s page for this lot warns that cars that don\u2019t pay, or enter the wrong plate, may be towed.',
+        'URI parking permits aren\u2019t valid here.',
+        'Towed? URI says to call Express Towing at 401-732-1000.',
+        'Monthly permits are also sold on PMC\u2019s site.',
+      ],
+      checked: 'Rates from PMC\u2019s checkout, Nov 23, 2026',
+    },
+    photo: require('../../assets/places/high-1-seating.webp'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026) · the plaza, with the lots beyond',
+    sources: [
+      { label: 'PMC: 99 Fortin Rd parking (hours, PMC Pay, monthly permits)', url: 'https://parkingmgt.com/lot/99-fortin-rd-kingston/' },
+      { label: 'PMC checkout for this lot (rates, fees, 156 spaces), checked Nov 23, 2026', url: 'https://go.parkingmgt.com/dH4DES' },
+      URI_EMPORIUM_PARKING,
+      { label: 'OpenStreetMap: lot outline (paid)', url: 'https://www.openstreetmap.org/way/1571791126' },
     ],
   },
   'welcome-center': {

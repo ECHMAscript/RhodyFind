@@ -18,6 +18,7 @@ import { Header } from '@/components/Header';
 import { CATEGORY_META, LOCATION_BY_ID, type CampusLocation, type Category, type IconName } from '@/data/locations';
 import { PHOTOS } from '@/data/photos';
 import { menuAverages, menuFor, money } from '@/data/menus';
+import type { ParkingInfo } from '@/data/parking';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { encodeEndpoint, fromLocation } from '@/lib/endpoints';
 import { formatMiles, travelMinutes } from '@/lib/geo';
@@ -34,7 +35,7 @@ const ACCENT = { coral: '#F08A5D', teal: '#0F8F7E', orange: '#E2703A', blue: '#2
 // The neon pink of the menu pages, for the buttons that open them.
 const MENU_PINK = '#FF2E93';
 
-const SERVICE_CATEGORIES: Category[] = ['dining', 'store', 'worship'];
+const SERVICE_CATEGORIES: Category[] = ['dining', 'store', 'worship', 'parking'];
 
 type Tile = { icon: IconName; color: string; label: string; value?: string; url?: string };
 
@@ -235,6 +236,8 @@ export default function PlaceScreen() {
               <Text style={styles.credit}>{menu.source}. Prices may have changed.</Text>
             </View>
           )}
+
+          {details?.parking && <ParkingCard info={details.parking} compact={compact} />}
 
           {/* Getting there */}
           <View style={[styles.card, styles.locationCard, wide && styles.locationCardWide, compact && styles.cardCompact]}>
@@ -552,6 +555,100 @@ function MiniMap({ place, wide }: { place: CampusLocation; wide: boolean }) {
   );
 }
 
+const PAID_PINK = '#D81B7A';
+
+/** A parking lot's rates, how to pay, and its rules. */
+function ParkingCard({ info, compact }: { info: ParkingInfo; compact: boolean }) {
+  return (
+    <View style={[styles.card, styles.pricesCard, compact && styles.cardCompact]}>
+      <View style={styles.pricesHead}>
+        <View style={{ flex: 1, minWidth: 200, gap: 8 }}>
+          <Text style={styles.cardTitle}>Parking here</Text>
+          <View style={styles.parkFacts}>
+            <View style={[styles.parkChip, info.rates && styles.parkChipPaid]}>
+              <MaterialCommunityIcons name={info.rates ? 'cash-clock' : 'store-outline'} size={16} color={info.rates ? PAID_PINK : colors.navy} />
+              <Text style={[styles.parkChipText, info.rates && { color: PAID_PINK }]}>{info.access}</Text>
+            </View>
+            {info.spaces !== undefined && (
+              <View style={styles.parkChip}>
+                <MaterialCommunityIcons name="car-multiple" size={16} color={colors.navy} />
+                <Text style={styles.parkChipText}>{info.spaces} spaces</Text>
+              </View>
+            )}
+            {info.operator && (
+              <View style={styles.parkChip}>
+                <MaterialCommunityIcons name="domain" size={16} color={colors.navy} />
+                <Text style={styles.parkChipText}>Run by {info.operator}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+        {info.payUrl && (
+          <Pressable
+            style={({ hovered }: any) => [styles.payButton, hovered && { opacity: 0.9 }]}
+            onPress={() => Linking.openURL(info.payUrl!)}
+            accessibilityRole="link"
+          >
+            <MaterialCommunityIcons name="cellphone-check" size={18} color={colors.white} />
+            <Text style={styles.payButtonText}>Pay online</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {info.rates && (
+        <>
+          <Text style={styles.parkHeading}>Cost</Text>
+          <View style={styles.prices}>
+            {info.rates.map((r) => (
+              <View key={r.label} style={[styles.price, styles.rate]}>
+                <Text style={styles.priceLabel}>Up to {r.label}</Text>
+                <Text style={styles.priceValue}>{money(r.price)}</Text>
+                <Text style={styles.priceRange}>{money(r.total)} with fees & tax</Text>
+              </View>
+            ))}
+          </View>
+          {info.rateNotes?.map((n) => (
+            <Text key={n} style={styles.pricesSub}>
+              {n}
+            </Text>
+          ))}
+        </>
+      )}
+
+      {info.payment && (
+        <>
+          <Text style={styles.parkHeading}>How to pay</Text>
+          <View style={{ gap: 8 }}>
+            {info.payment.map((step, i) => (
+              <View key={step} style={styles.step}>
+                <View style={styles.stepNum}>
+                  <Text style={styles.stepNumText}>{i + 1}</Text>
+                </View>
+                <Text style={styles.stepText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {info.rules && (
+        <View style={styles.parkRules}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={20} color={colors.danger} />
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text style={styles.parkRulesTitle}>Before you leave the car</Text>
+            {info.rules.map((r) => (
+              <Text key={r} style={styles.parkRule}>
+                {'\u2022'} {r}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
+      {info.checked && <Text style={styles.credit}>{info.checked}. Prices can change; the sign and checkout have the final word.</Text>}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   scroll: { paddingBottom: 40 },
@@ -610,6 +707,21 @@ const styles = StyleSheet.create({
   menuButtonHover: { backgroundColor: '#222' },
   menuButtonText: { color: colors.white, fontWeight: '800', fontSize: 16 },
   pricesCard: { gap: 14 },
+  parkFacts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  parkChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: '#F3F8FE' },
+  parkChipPaid: { backgroundColor: '#FDE8F2' },
+  parkChipText: { fontSize: 13, fontWeight: '700', color: colors.navy },
+  parkHeading: { fontSize: 16, fontWeight: '800', color: colors.navy, marginTop: 4 },
+  rate: { flexBasis: 120, minWidth: 110, borderTopWidth: 3, borderTopColor: PAID_PINK },
+  payButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingHorizontal: 20, borderRadius: radius.pill, backgroundColor: PAID_PINK },
+  payButtonText: { color: colors.white, fontWeight: '800', fontSize: 16 },
+  step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  stepNum: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.navy, alignItems: 'center', justifyContent: 'center' },
+  stepNumText: { color: colors.white, fontWeight: '800', fontSize: 13 },
+  stepText: { flex: 1, fontSize: 15, lineHeight: 22, color: colors.text, paddingTop: 2 },
+  parkRules: { flexDirection: 'row', gap: 10, padding: 14, borderRadius: radius.lg, backgroundColor: '#FFF1F1', borderWidth: 1, borderColor: '#F7C9CB' },
+  parkRulesTitle: { fontSize: 15, fontWeight: '800', color: colors.navy },
+  parkRule: { fontSize: 14, lineHeight: 20, color: colors.text },
   pricesHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
   pricesSub: { fontSize: 13, lineHeight: 18, color: colors.textMuted },
   prices: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

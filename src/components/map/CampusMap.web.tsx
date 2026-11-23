@@ -1,9 +1,10 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, Marker, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Polygon, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { CATEGORY_META, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
+import { CATEGORY_META, LOCATION_BY_ID, URI_CENTER, type CampusLocation, type IconName } from '@/data/locations';
+import { PARKING_AREAS, PARKING_KIND_META, type ParkingArea } from '@/data/parking';
 import { colors } from '@/theme';
 import { haversineMeters, type LatLng } from '@/lib/geo';
 import { angleDelta } from '@/lib/heading';
@@ -55,29 +56,33 @@ const PlaceMarker = memo(function PlaceMarker({
   place,
   onPress,
   dimmed = false,
+  labeled = false,
 }: {
   place: CampusLocation;
   onPress?: (place: CampusLocation) => void;
   /** A route is on the map and this place isn't on it: fade it and drop its label. */
   dimmed?: boolean;
+  /** Show the name even though it isn't a major place (parking lots while they're highlighted). */
+  labeled?: boolean;
 }) {
   const position = useMemo<L.LatLngTuple>(() => [place.lat, place.lng], [place.lat, place.lng]);
   const handlers = useMemo(() => ({ click: () => onPress?.(place) }), [onPress, place]);
   const side = place.labelSide ?? 'top';
+  const permanent = (!!place.major || labeled) && !dimmed;
   return (
     <Marker
       position={position}
       icon={badgeIcon(place.icon ?? CATEGORY_META[place.category].icon, !!place.major)}
       eventHandlers={handlers}
-      zIndexOffset={place.major && !dimmed ? 100 : 0}
+      zIndexOffset={permanent ? (labeled ? 200 : 100) : 0}
       opacity={dimmed ? 0.4 : 1}
     >
       {/* Keyed so the label is rebuilt when it switches between always-on and hover-only. */}
       <Tooltip
-        key={String(place.major && !dimmed)}
+        key={String(permanent)}
         direction={side}
         offset={TOOLTIP_OFFSET[side]}
-        permanent={!!place.major && !dimmed}
+        permanent={permanent}
       >
         {place.name}
       </Tooltip>
@@ -86,6 +91,38 @@ const PlaceMarker = memo(function PlaceMarker({
 });
 
 const toTuple = (p: LatLng): L.LatLngTuple => [p.lat, p.lng];
+
+/**
+ * One parking lot's outline, filled in the color of who can park there. The
+ * lots RhodyFind lists are drawn bolder and open their page when tapped.
+ */
+const ParkingShape = memo(function ParkingShape({
+  area,
+  onPress,
+}: {
+  area: ParkingArea;
+  onPress?: (place: CampusLocation) => void;
+}) {
+  const positions = useMemo(() => area.outline.map(toTuple), [area]);
+  const place = area.lot ? LOCATION_BY_ID[area.lot] : undefined;
+  const meta = PARKING_KIND_META[area.kind];
+  const style = useMemo<L.PathOptions>(
+    () => ({ color: meta.color, weight: place ? 3 : 1.5, opacity: 0.9, fillColor: meta.color, fillOpacity: place ? 0.4 : 0.22 }),
+    [meta.color, place],
+  );
+  const handlers = useMemo(() => ({ click: () => place && onPress?.(place) }), [place, onPress]);
+  const name = place?.name ?? area.name ?? (area.ref ? `Lot ${area.ref}` : 'Parking lot');
+  return (
+    <Polygon positions={positions} pathOptions={style} eventHandlers={handlers} bubblingMouseEvents={false}>
+      <Tooltip sticky>
+        <b>{name}</b>
+        {area.ref && place ? ` (lot ${area.ref})` : ''}
+        <br />
+        {meta.label}
+      </Tooltip>
+    </Polygon>
+  );
+});
 
 function FitBounds({ points, bottomInset }: { points: L.LatLngTuple[]; bottomInset: number }) {
   const map = useMap();
@@ -429,6 +466,7 @@ export const CampusMap = memo(function CampusMap({
   onUserPan,
   bottomInset = 0,
   trimRouteToUser = false,
+  showParking = false,
 }: CampusMapProps) {
   const [frameListeners] = useState(() => new Set<FrameListener>());
   const trimTo = trimRouteToUser && userFix ? frameListeners : undefined;
@@ -470,12 +508,15 @@ export const CampusMap = memo(function CampusMap({
       <ZoomControl position="bottomright" />
       <FitBounds points={follow && userFix ? NO_POINTS : frame} bottomInset={bottomInset} />
 
+      {showParking && PARKING_AREAS.map((a) => <ParkingShape key={a.id} area={a} onPress={onPlacePress} />)}
+
       {places.map((p) => (
         <PlaceMarker
           key={p.id}
           place={p}
           onPress={onPlacePress}
-          dimmed={hasRoute && p.id !== from?.id && p.id !== to?.id}
+          dimmed={showParking ? p.category !== 'parking' : hasRoute && p.id !== from?.id && p.id !== to?.id}
+          labeled={showParking && p.category === 'parking'}
         />
       ))}
 

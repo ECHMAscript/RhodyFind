@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CATEGORY_META, URI_CENTER } from '@/data/locations';
+import { PARKING_AREAS, PARKING_KIND_META } from '@/data/parking';
 import type { LatLng } from '@/lib/geo';
 import { colors } from '@/theme';
 import type { CampusMapProps } from './types';
@@ -24,6 +25,7 @@ export const CampusMap = memo(function CampusMap({
   fitTo,
   onUserPan,
   bottomInset = 0,
+  showParking = false,
 }: CampusMapProps) {
   const user = userFix?.position;
   const heading = userFix?.heading;
@@ -71,6 +73,16 @@ export const CampusMap = memo(function CampusMap({
       showsPointsOfInterests={false}
       onPanDrag={followUser ? onUserPan : undefined}
     >
+      {showParking &&
+        PARKING_AREAS.map((a) => (
+          <Polygon
+            key={a.id}
+            coordinates={a.outline.map(toCoord)}
+            strokeColor={PARKING_KIND_META[a.kind].color}
+            strokeWidth={a.lot ? 3 : 1.5}
+            fillColor={`${PARKING_KIND_META[a.kind].color}${a.lot ? '66' : '38'}`}
+          />
+        ))}
       {places.map((p) => (
         <Marker
           key={p.id}

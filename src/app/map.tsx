@@ -11,6 +11,7 @@ import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
 import { LOCATION_BY_ID, PLACES, type CampusLocation } from '@/data/locations';
 import { menuFor } from '@/data/menus';
+import { PARKING_BOUNDS, PARKING_KIND_META, type ParkingKind } from '@/data/parking';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
@@ -287,6 +288,10 @@ export default function MapScreen() {
   }, [activeRoute, step, highlight]);
   const onUserPan = useCallback(() => setCameraFree(true), []);
 
+  // "Show parking": every lot around campus outlined and colored by who can park there.
+  const [showParking, setShowParking] = useState(false);
+  const mapFit = showParking && !follow ? PARKING_BOUNDS : fitTo;
+
   const useMyLocation = async () => {
     const coords = await locate();
     if (coords) setFrom(currentPosition(coords));
@@ -388,6 +393,8 @@ export default function MapScreen() {
             <Text style={styles.learnMoreSub} numberOfLines={1}>
               {menuFor(aboutPlace.id)
                 ? 'Menu, prices, photos and hours'
+                : PLACE_DETAILS[aboutPlace.id]?.parking
+                  ? 'Rates, how to pay and the rules'
                 : ['dining', 'store', 'worship'].includes(aboutPlace.category)
                   ? 'Photos, hours, phone and more'
                 : 'Photo, floors, bathrooms and more'}
@@ -512,12 +519,38 @@ export default function MapScreen() {
       userFix={farAway ? undefined : shownFix}
       trimRouteToUser={live}
       follow={follow}
-      fitTo={fitTo}
+      fitTo={mapFit}
       onUserPan={onUserPan}
+      showParking={showParking}
       // Phone, sheet down: the sheet covers the bottom. Phone, planning: the
       // panel's rounded top overlaps the map by PANEL_OVERLAP.
       bottomInset={sheet ? peekHeight : mobile ? PANEL_OVERLAP : 0}
     />
+  );
+  const parkingToggle = (
+    <View style={styles.parkingBox} pointerEvents="box-none">
+      <Pressable
+        style={({ hovered }: any) => [styles.parkingButton, showParking && styles.parkingButtonOn, hovered && !showParking && { backgroundColor: colors.keaneyTint }]}
+        onPress={() => setShowParking((s) => !s)}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: showParking }}
+        accessibilityLabel="Highlight parking lots"
+      >
+        <MaterialCommunityIcons name="parking" size={18} color={showParking ? colors.white : colors.navy} />
+        <Text style={[styles.parkingButtonText, showParking && { color: colors.white }]}>{showParking ? 'Hide parking' : 'Show parking'}</Text>
+      </Pressable>
+      {showParking && (
+        <View style={[styles.legend, mobile && styles.legendCompact]}>
+          {(Object.keys(PARKING_KIND_META) as ParkingKind[]).map((k) => (
+            <View key={k} style={[styles.legendRow, mobile && styles.legendRowCompact]}>
+              <View style={[styles.legendSwatch, { backgroundColor: PARKING_KIND_META[k].color }]} />
+              <Text style={[styles.legendText, mobile && styles.legendTextCompact]}>{PARKING_KIND_META[k].label}</Text>
+            </View>
+          ))}
+          {!mobile && <Text style={styles.legendNote}>Tap a named lot for rates and rules. Lot rules from OpenStreetMap; signs have the final word.</Text>}
+        </View>
+      )}
+    </View>
   );
   // After the user drags the map mid-navigation, offer a way back to following.
   const recenter = navigating && following && cameraFree && user && !farAway && (
@@ -542,6 +575,7 @@ export default function MapScreen() {
                 camera keeps the user centered in the part above the sheet. */}
             <View style={StyleSheet.absoluteFill}>
               {map}
+              {parkingToggle}
               {recenter}
             </View>
             <BottomSheet
@@ -557,6 +591,7 @@ export default function MapScreen() {
           <>
             <View style={styles.mapMobile}>
               {map}
+              {parkingToggle}
               {recenter}
             </View>
             {panel}
@@ -566,6 +601,7 @@ export default function MapScreen() {
             {panel}
             <View style={styles.map}>
               {map}
+              {parkingToggle}
               {recenter}
             </View>
           </>
@@ -612,6 +648,29 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   recenterText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+  parkingBox: { position: 'absolute', top: 12, right: 12, zIndex: 1000, alignItems: 'flex-end', gap: 8, maxWidth: 230 },
+  parkingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.navy,
+    ...shadow.card,
+  },
+  parkingButtonOn: { backgroundColor: colors.navy },
+  parkingButtonText: { color: colors.navy, fontWeight: '800', fontSize: 14 },
+  legend: { backgroundColor: colors.white, borderRadius: radius.md, padding: 10, gap: 6, ...shadow.card },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendSwatch: { width: 14, height: 14, borderRadius: 3 },
+  legendText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  legendNote: { fontSize: 11, lineHeight: 15, color: colors.textMuted },
+  legendCompact: { flexDirection: 'row', flexWrap: 'wrap', width: 210, padding: 8, rowGap: 4, columnGap: 8 },
+  legendRowCompact: { width: 93, gap: 5 },
+  legendTextCompact: { fontSize: 11 },
   mapMobile: { height: 340 },
 
   back: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
