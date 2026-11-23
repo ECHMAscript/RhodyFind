@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Header } from '@/components/Header';
 import { CATEGORY_META, LOCATION_BY_ID, type CampusLocation, type Category, type IconName } from '@/data/locations';
 import { PHOTOS } from '@/data/photos';
+import { menuAverages, menuFor, money } from '@/data/menus';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { encodeEndpoint, fromLocation } from '@/lib/endpoints';
 import { formatMiles, travelMinutes } from '@/lib/geo';
@@ -30,6 +31,9 @@ const ACCENT = { coral: '#F08A5D', teal: '#0F8F7E', orange: '#E2703A', blue: '#2
 
 // Businesses and services get Hours / Phone / Website tiles instead of the
 // building ones (built, floors, classrooms).
+// The neon pink of the menu pages, for the buttons that open them.
+const MENU_PINK = '#FF2E93';
+
 const SERVICE_CATEGORIES: Category[] = ['dining', 'store', 'worship'];
 
 type Tile = { icon: IconName; color: string; label: string; value?: string; url?: string };
@@ -54,6 +58,9 @@ export default function PlaceScreen() {
     const restroom = inside ? { location: inside, meters: 0 } : findNearest(place, { category: 'restroom', k: 1 })[0];
     return { lot, lotWalkMin, restroom, restroomInside: !!inside };
   }, [place]);
+
+  const menu = id ? menuFor(id) : undefined;
+  const averages = useMemo(() => (menu ? menuAverages(menu) : []), [menu]);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace(place ? `/map?to=${place.id}` : '/'));
 
@@ -167,6 +174,16 @@ export default function PlaceScreen() {
                 >
                   <MaterialCommunityIcons name="share-variant-outline" size={20} color={colors.navy} />
                 </Pressable>
+                {menu && (
+                  <Pressable
+                    style={({ hovered }: any) => [styles.menuButton, hovered && styles.menuButtonHover]}
+                    onPress={() => router.push(`/menu/${place.id}`)}
+                    accessibilityRole="button"
+                  >
+                    <MaterialCommunityIcons name="silverware-fork-knife" size={18} color={MENU_PINK} />
+                    <Text style={styles.menuButtonText}>View menu</Text>
+                  </Pressable>
+                )}
                 {shareNote && <Text style={styles.shareNote}>{shareNote}</Text>}
               </View>
 
@@ -183,6 +200,41 @@ export default function PlaceScreen() {
               )}
             </View>
           </View>
+
+          {/* Average prices, from the transcribed menu */}
+          {menu && averages.length > 0 && (
+            <View style={[styles.card, styles.pricesCard, compact && styles.cardCompact]}>
+              <View style={styles.pricesHead}>
+                <View style={{ flex: 1, minWidth: 200, gap: 2 }}>
+                  <Text style={styles.cardTitle}>Average prices</Text>
+                  <Text style={styles.pricesSub}>
+                    Each item counted once at its base price (e.g. the plain sub, not the combo), before tax.
+                  </Text>
+                </View>
+                <Pressable
+                  style={({ hovered }: any) => [styles.menuButton, hovered && styles.menuButtonHover]}
+                  onPress={() => router.push(`/menu/${place.id}`)}
+                  accessibilityRole="button"
+                >
+                  <MaterialCommunityIcons name="book-open-page-variant-outline" size={18} color={MENU_PINK} />
+                  <Text style={styles.menuButtonText}>Full menu</Text>
+                </Pressable>
+              </View>
+              <View style={styles.prices}>
+                {averages.map((a) => (
+                  <View key={a.label} style={styles.price}>
+                    <Text style={styles.priceLabel}>{a.label}</Text>
+                    <Text style={styles.priceValue}>{money(a.average)}</Text>
+                    <Text style={styles.priceRange}>
+                      {money(a.low)}–{money(a.high)} · {a.count} items
+                    </Text>
+                    {a.note && <Text style={styles.priceNote}>{a.note}</Text>}
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.credit}>{menu.source}. Prices may have changed.</Text>
+            </View>
+          )}
 
           {/* Getting there */}
           <View style={[styles.card, styles.locationCard, wide && styles.locationCardWide, compact && styles.cardCompact]}>
@@ -554,6 +606,18 @@ const styles = StyleSheet.create({
   directionsText: { color: colors.white, fontWeight: '800', fontSize: 16 },
   iconButton: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.keaneyTint },
   iconButtonHover: { backgroundColor: '#D6E8FA' },
+  menuButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 50, paddingHorizontal: 20, borderRadius: radius.pill, backgroundColor: '#111', borderWidth: 2, borderColor: MENU_PINK },
+  menuButtonHover: { backgroundColor: '#222' },
+  menuButtonText: { color: colors.white, fontWeight: '800', fontSize: 16 },
+  pricesCard: { gap: 14 },
+  pricesHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12 },
+  pricesSub: { fontSize: 13, lineHeight: 18, color: colors.textMuted },
+  prices: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  price: { flexGrow: 1, flexBasis: 150, minWidth: 140, gap: 2, padding: 14, borderRadius: radius.lg, backgroundColor: '#F3F8FE' },
+  priceLabel: { fontSize: 14, fontWeight: '800', color: colors.navy },
+  priceValue: { fontSize: 28, fontWeight: '800', color: colors.navy, letterSpacing: -0.5 },
+  priceRange: { fontSize: 12, color: colors.textMuted },
+  priceNote: { fontSize: 12, fontWeight: '700', color: ACCENT.teal, marginTop: 2 },
   shareNote: { fontSize: 13, fontWeight: '600', color: ACCENT.green },
 
   about: { borderLeftWidth: 3, borderLeftColor: colors.keaney, paddingLeft: 14, paddingVertical: 2 },

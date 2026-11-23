@@ -111,7 +111,8 @@ const BUILDINGS: CampusLocation[] = [
   // the unit OpenStreetMap still lists as Krazy Fusion Cafe; High 1 is in the
   // building where OSM lists Albie's Place and Providence Bagel.
   { id: 'taste-of-korea', name: 'Taste of Korea', category: 'dining', subtitle: 'Korean food & boba · 99 Fortin Rd', lat: 41.48572, lng: -71.52371 },
-  { id: 'high-1', name: 'High 1', category: 'dining', subtitle: 'Pizza, gelato & more · Fortin Rd', lat: 41.48558, lng: -71.52452 },
+  { id: 'high-1', name: 'High 1', category: 'dining', subtitle: 'Pizza, gelato & more · Fortin Rd', lat: 41.4855, lng: -71.52457 },
+  { id: 'albies-place', name: 'Albie\u2019s Place', category: 'dining', subtitle: 'Burgers, subs & breakfast · 99 Fortin Rd', lat: 41.48569, lng: -71.5245 },
 
   // Parking
   { id: 'ram-lot', name: 'Ram Lot', category: 'parking', subtitle: 'Parking', lat: 41.48863, lng: -71.53634 },

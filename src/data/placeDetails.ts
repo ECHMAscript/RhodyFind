@@ -93,6 +93,40 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       { label: 'Caviar: Korean food in Kingston', url: 'https://www.trycaviar.com/en/food-delivery/kingston-ri-restaurants/korean' },
     ],
   },
+  'albies-place': {
+    about:
+      'Albie’s Place is a casual counter-service spot in the Kingston Emporium plaza, next door to High 1. The ' +
+      'sign calls it the “Home of the Phat Albie & Burger Madness”: burgers, hot dogs, hot and deli subs, ' +
+      'wraps, clubs, salads, fries and loaded “Phat” sandwiches stuffed with fries and mozzarella sticks. ' +
+      'Breakfast sandwiches are served all day.',
+    address: '99 Fortin Road (Kingston Emporium), Kingston, RI 02881',
+    hours:
+      'Weekdays 11:30 a.m.–close; weekends from about noon (door sign, Nov 2026; the weekend time was hard to read). ' +
+      'Online listings disagree, so call ahead.',
+    phone: '401-792-3860',
+    website: 'https://albiesplace.com',
+    highlights: [
+      'Breakfast sandwiches served all day',
+      'Burger Madness: buy one burger platter for $13.49 and get a second for half off',
+      'Home of the Phat Albie: chicken fingers, mozzarella sticks, fries and bacon in one sub',
+      'Combos add a 21 oz fountain drink with free refills',
+      'Outdoor tables on the brick courtyard out front',
+    ],
+    photo: require('../../assets/places/albies-front.jpg'),
+    photoCredit: 'Photo: RhodyFind team (Nov 2026)',
+    gallery: [
+      { source: require('../../assets/places/albies-front.jpg'), caption: 'Storefront and courtyard seating' },
+      { source: require('../../assets/places/albies-menu-top.jpg'), caption: 'Menu board: breakfast, appetizers, salads, hot dogs' },
+      { source: require('../../assets/places/albies-menu-middle.jpg'), caption: 'Menu board: hot subs, Phat sandwiches, grilled sandwiches' },
+      { source: require('../../assets/places/albies-menu-bottom.jpg'), caption: 'Menu board: clubs, deli, burgers, drinks' },
+    ],
+    sources: [
+      { ...IN_PERSON_VISIT, label: 'Visited by the RhodyFind team (Nov 2026): photos, menu board and door hours' },
+      { label: 'Visit Rhode Island: Albie’s Place', url: 'https://www.visitrhodeisland.com/listing/albies-place/3171/' },
+      { label: 'Sirved: Albie’s Place (lists 8:30 a.m.–9 p.m.)', url: 'https://www.sirved.com/' },
+      { label: 'BringFido: Albie’s Place (lists Mon–Thu 8:30 a.m.–11 p.m., Fri–Sat to 2 a.m., Sun 11 a.m.–11 p.m.)', url: 'https://www.bringfido.com/' },
+    ],
+  },
   'high-1': {
     about:
       'High 1 ("love at first slice") is a family-owned pizzeria in the Kingston Emporium plaza, next door to Albie’s. ' +

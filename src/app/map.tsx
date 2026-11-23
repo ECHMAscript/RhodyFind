@@ -10,6 +10,7 @@ import { NavigationPanel } from '@/components/NavigationPanel';
 import { TravelModes } from '@/components/TravelModes';
 import { CampusMap } from '@/components/map/CampusMap';
 import { LOCATION_BY_ID, PLACES, type CampusLocation } from '@/data/locations';
+import { menuFor } from '@/data/menus';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { currentPosition, decodeEndpoint, encodeEndpoint, fromLocation, type Endpoint } from '@/lib/endpoints';
 import {
@@ -385,8 +386,10 @@ export default function MapScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.learnMoreTitle}>Learn more about {aboutPlace.name}</Text>
             <Text style={styles.learnMoreSub} numberOfLines={1}>
-              {['dining', 'store', 'worship'].includes(aboutPlace.category)
-                ? 'Photos, hours, phone and more'
+              {menuFor(aboutPlace.id)
+                ? 'Menu, prices, photos and hours'
+                : ['dining', 'store', 'worship'].includes(aboutPlace.category)
+                  ? 'Photos, hours, phone and more'
                 : 'Photo, floors, bathrooms and more'}
             </Text>
           </View>
