@@ -1,3 +1,5 @@
+import type { IconName } from '../locations';
+
 /** One way to order an item, e.g. { label: 'Platter', price: 13.49 }. */
 export type MenuOption = { label: string; price: number };
 
@@ -23,6 +25,8 @@ export type MenuSection = {
   id: string;
   title: string;
   kind: MenuKind;
+  /** Shown on the section's tab and item thumbnails. */
+  icon: IconName;
   /** Prices that apply to every item in the section (Sub / Platter / Combo...). */
   options?: MenuOption[];
   /** Short lines under the title (e.g. "Served all day"). */
@@ -38,6 +42,14 @@ export type Menu = {
   name: string;
   phone?: string;
   website?: string;
+  /** Small caps line under the name, e.g. "Kingston Emporium". */
+  kicker?: string;
+  /** The restaurant's own slogan, from its sign. */
+  tagline?: string;
+  /** Lines from the storefront sign, shown as "On the sign". */
+  signLines?: string[];
+  /** Items to spotlight in the featured card, by section id and item name. */
+  featured?: { section: string; item: string; label: string; blurb?: string }[];
   /** Where the menu came from, e.g. "Menu board photographed Nov 2026". */
   source: string;
   sections: MenuSection[];

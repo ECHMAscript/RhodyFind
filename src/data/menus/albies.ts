@@ -24,11 +24,21 @@ export const ALBIES_MENU: Menu = {
   name: 'Albie’s Place',
   phone: '401-792-3860',
   website: 'https://albiesplace.com',
+  kicker: 'Kingston Emporium',
+  tagline: 'The Home of the Phat Albie & Burger Madness',
+  signLines: ['Albie\u2019s Famous Fries & Cheese', 'Gourmet Dogs', 'Platters & Salads', 'Deli Sandwiches & Clubs'],
+  featured: [
+    { section: 'phat', item: 'Phat Albie', label: 'House specialty', blurb: 'The sandwich the shop is named for' },
+    { section: 'burger-platters', item: 'Classic Burger', label: 'Burger Madness', blurb: 'Buy 1 burger platter, get a 2nd half off' },
+    { section: 'phat', item: 'Phat Phantastic Wrap', label: 'New on the board' },
+    { section: 'breakfast', item: '1 Egg & Cheese', label: 'Breakfast all day' },
+  ],
   source: 'Menu board photographed by the RhodyFind team (Nov 2026)',
   footnote: 'Please inform your server of any food allergies.',
   sections: [
     {
       id: 'breakfast',
+      icon: 'egg-fried',
       title: 'Breakfast Sandwiches',
       kind: 'breakfast',
       notes: ['Served all day'],
@@ -48,6 +58,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'appetizers',
+      icon: 'french-fries',
       title: 'Appetizers',
       kind: 'side',
       items: [
@@ -71,6 +82,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'salads',
+      icon: 'leaf',
       title: 'Salads',
       kind: 'main',
       items: [
@@ -87,6 +99,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'salad-addons',
+      icon: 'bowl-mix',
       title: 'Salad Add-Ons',
       kind: 'addon',
       notes: ['Add to any of the salads above'],
@@ -107,6 +120,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'hot-dogs',
+      icon: 'food-hot-dog',
       title: 'Hot Dogs',
       kind: 'main',
       options: one(3.39, 'Hot dog'),
@@ -126,6 +140,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'wings',
+      icon: 'food-drumstick',
       title: 'Wings & Fingers',
       kind: 'main',
       notes: ['Buffalo, teriyaki, BBQ, Cajun or plain'],
@@ -137,6 +152,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'grilled-cheese',
+      icon: 'cheese',
       title: 'Grilled Cheese',
       kind: 'main',
       items: [
@@ -149,6 +165,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'hot-subs',
+      icon: 'baguette',
       title: 'Hot Subs & Wraps',
       kind: 'main',
       options: SUB_OPTIONS,
@@ -175,6 +192,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'phat',
+      icon: 'fire',
       title: 'Phat Sandwiches',
       kind: 'main',
       options: [{ label: 'Sub', price: 10.99 }, { label: 'Wrap', price: 13.19 }],
@@ -203,6 +221,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'grilled-sandwiches',
+      icon: 'bread-slice',
       title: 'Grilled Sandwiches',
       kind: 'main',
       options: [
@@ -220,6 +239,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'clubs',
+      icon: 'food-turkey',
       title: 'Albie’s Clubs',
       kind: 'main',
       options: [{ label: 'With steak fries', price: 13.49 }, { label: 'Combo', price: 15.49 }],
@@ -240,6 +260,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'deli',
+      icon: 'baguette',
       title: 'Deli Sandwiches',
       kind: 'main',
       options: [
@@ -267,6 +288,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'burgers',
+      icon: 'hamburger',
       title: 'Burgers',
       kind: 'main',
       items: [
@@ -283,6 +305,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'burger-platters',
+      icon: 'hamburger-plus',
       title: 'Burger Platters',
       kind: 'main',
       options: [{ label: 'Platter', price: 13.49 }, { label: 'Combo', price: 15.49 }],
@@ -307,6 +330,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'drinks',
+      icon: 'cup',
       title: 'Drinks',
       kind: 'drink',
       items: [
@@ -320,6 +344,7 @@ export const ALBIES_MENU: Menu = {
     },
     {
       id: 'desserts',
+      icon: 'cookie',
       title: 'Desserts',
       kind: 'dessert',
       items: [
