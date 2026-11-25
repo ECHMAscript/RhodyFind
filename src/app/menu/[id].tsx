@@ -41,6 +41,7 @@ export default function MenuScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const menu = id ? menuFor(id) : undefined;
   const details = id ? PLACE_DETAILS[id] : undefined;
+  const hours = splitHours(details?.hours);
   const { width } = useWindowDimensions();
   const compact = width < breakpoints.tablet;
   const wide = width >= 1000;
@@ -242,8 +243,8 @@ export default function MenuScreen() {
                 {featured.length > 0 && <FeaturedCard items={featured} onAdd={add} compact={compact} style={wide ? { flex: 1.5 } : undefined} />}
                 <View style={[styles.infoCards, wide && { flex: 2 }]}>
                   <InfoCard icon="clock-outline" color={CYAN} title="Hours">
-                    <Text style={styles.infoText}>{details?.hours?.split(' (')[0] ?? 'Not confirmed yet'}</Text>
-                    <Text style={styles.infoSmall}>From the door sign. Online listings disagree, so call ahead.</Text>
+                    <Text style={styles.infoText}>{hours.main}</Text>
+                    {!!hours.note && <Text style={styles.infoSmall}>{hours.note}</Text>}
                   </InfoCard>
                   <InfoCard icon="silverware-fork-knife" color={colors.navy} title="Average prices">
                     {averages
@@ -335,6 +336,18 @@ export default function MenuScreen() {
       )}
     </View>
   );
+}
+
+/**
+ * Splits place hours like "Mon–Fri 11–9 (Yelp, Nov 2026). Call ahead." into
+ * the hours themselves and the small print: where they're from, and any caveat.
+ */
+function splitHours(hours?: string): { main: string; note?: string } {
+  if (!hours) return { main: 'Not confirmed yet' };
+  const m = /^(.*?)\s*\(([^)]*)\)\.?\s*(.*)$/.exec(hours);
+  if (!m) return { main: hours };
+  const source = m[2].charAt(0).toUpperCase() + m[2].slice(1);
+  return { main: m[1], note: [`Source: ${source}.`, m[3]].filter(Boolean).join(' ') };
 }
 
 /** Quad photo fading into the page, the storefront, and the name in the site's navy. */
@@ -730,6 +743,9 @@ function OrderPanel({
 
 const softShadow = { ...shadow.card, shadowOpacity: 0.08 };
 
+// Korean names wrap between words, not mid-word (CSS breaks Hangul anywhere by default).
+const KEEP_WORDS = Platform.OS === 'web' ? ({ wordBreak: 'keep-all' } as object) : {};
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   scroll: { paddingBottom: 48 },
@@ -853,7 +869,7 @@ const styles = StyleSheet.create({
     backgroundColor: PINK_GLOW,
   },
   featuredTagText: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
-  featuredName: { color: colors.white, fontWeight: '800', fontSize: 32, lineHeight: 38 },
+  featuredName: { color: colors.white, fontWeight: '800', fontSize: 32, lineHeight: 38, ...KEEP_WORDS },
   featuredNameCompact: { fontSize: 23, lineHeight: 28 },
   featuredDesc: { color: '#CFE2F7', fontStyle: 'italic', fontSize: 15, lineHeight: 21 },
   featuredActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 6 },
@@ -968,7 +984,7 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   itemNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  itemName: { fontSize: 18, fontWeight: '800', color: colors.navy, flexShrink: 1 },
+  itemName: { fontSize: 18, fontWeight: '800', color: colors.navy, flexShrink: 1, ...KEEP_WORDS },
   newTag: { paddingHorizontal: 8, height: 20, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: PINK },
   newTagText: { color: colors.white, fontSize: 11, fontWeight: '900' },
   itemDesc: { fontSize: 14, lineHeight: 20, fontStyle: 'italic', color: colors.textMuted },
@@ -1027,7 +1043,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  lineName: { fontSize: 14, fontWeight: '700', color: colors.navy },
+  lineName: { fontSize: 14, fontWeight: '700', color: colors.navy, ...KEEP_WORDS },
   lineOption: { fontSize: 12, color: colors.textMuted },
   lineTotal: { fontSize: 14, fontWeight: '800', color: colors.navy, minWidth: 58, textAlign: 'right' },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },

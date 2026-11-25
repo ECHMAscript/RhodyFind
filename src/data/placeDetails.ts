@@ -79,13 +79,17 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
   // ------------------------------------------- Fortin Road (checked in person)
   'taste-of-korea': {
     about:
-      'Taste of Korea is a casual Korean restaurant in the Emporium plaza on Fortin Road, steps from campus. A neon ' +
-      'sign in its window advertises boba tea alongside the food.',
+      'Taste of Korea is a casual Korean restaurant in the Emporium plaza on Fortin Road, steps from campus. It ' +
+      'serves Korean comfort food (rice bowls like bulgogi, bibimbap and chicken mayo, japchae and ramyun noodles, ' +
+      'kimchi stew and dumplings) plus bubble tea, for eating in, pickup or delivery.',
     address: '99 Fortin Road, Suite 104, Kingston, RI 02881',
+    hours: 'Mon–Fri 11 a.m.–9 p.m.; Sat–Sun 1–9 p.m. (Yelp and Apple Maps, Nov 2026)',
     phone: '401-363-9777',
+    website: 'https://www.doordash.com/store/taste-of-korea-kingston-36482961/',
     highlights: [
-      'Boba tea (sign in the window)',
-      'Rated 4.9 from 200+ reviews on the Caviar delivery app',
+      'Bubble tea: milk teas and juice teas, with boba or jelly toppings',
+      'Chicken Mayo is the most-liked dish on DoorDash, where the shop is rated 4.9 from 500+ ratings',
+      'Order online through DoorDash for pickup or delivery',
       'The same phone number and suite were previously listed for Krazy Fusion Cafe, which older maps still show here',
     ],
     photo: require('../../assets/places/taste-of-korea-front.webp'),
@@ -98,6 +102,9 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       IN_PERSON_VISIT,
       { label: 'Visit Rhode Island: Krazy Fusion Cafe (same address and phone)', url: 'https://www.visitrhodeisland.com/listing/krazy-fusion-cafe/3601/' },
       { label: 'Caviar: Korean food in Kingston', url: 'https://www.trycaviar.com/en/food-delivery/kingston-ri-restaurants/korean' },
+      { label: 'DoorDash: Taste of Korea (Kingston), menu and prices (read Nov 25, 2026)', url: 'https://www.doordash.com/store/taste-of-korea-kingston-36482961/' },
+      { label: 'Yelp: Taste of Korea, hours (Mon–Fri 11–9, Sat–Sun 1–9)', url: 'https://www.yelp.com/biz/taste-of-korea-kingstown' },
+      { label: 'Apple Maps: Taste of Korea, hours (11 a.m.–9 p.m. on weekdays)', url: 'https://maps.apple.com/place?place-id=I8503AC3E8DE60879' },
     ],
   },
   'albies-place': {
@@ -105,7 +112,7 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       'Albie’s Place is a casual counter-service spot in the Kingston Emporium plaza, next door to High 1. The ' +
       'sign calls it the “Home of the Phat Albie & Burger Madness”: burgers, hot dogs, hot and deli subs, ' +
       'wraps, clubs, salads, fries and loaded “Phat” sandwiches stuffed with fries and mozzarella sticks. ' +
-      'Breakfast sandwiches are served all day.',
+      'Breakfast sandwiches are served until 12 noon.',
     address: '99 Fortin Road (Kingston Emporium), Kingston, RI 02881',
     hours:
       'Weekdays 11:30 a.m.–close; weekends from about noon (door sign, Nov 2026; the weekend time was hard to read). ' +
@@ -113,7 +120,7 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
     phone: '401-792-3860',
     website: 'https://albiesplace.com',
     highlights: [
-      'Breakfast sandwiches served all day',
+      'Breakfast sandwiches served until 12 noon',
       'Burger Madness: buy one burger platter for $13.49 and get a second for half off',
       'Home of the Phat Albie: chicken fingers, mozzarella sticks, fries and bacon in one sub',
       'Combos add a 21 oz fountain drink with free refills',

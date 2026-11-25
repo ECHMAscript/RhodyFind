@@ -31,7 +31,7 @@ export const ALBIES_MENU: Menu = {
     { section: 'phat', item: 'Phat Albie', label: 'House specialty', blurb: 'The sandwich the shop is named for' },
     { section: 'burger-platters', item: 'Classic Burger', label: 'Burger Madness', blurb: 'Buy 1 burger platter, get a 2nd half off' },
     { section: 'phat', item: 'Phat Phantastic Wrap', label: 'New on the board' },
-    { section: 'breakfast', item: '1 Egg & Cheese', label: 'Breakfast all day' },
+    { section: 'breakfast', item: '1 Egg & Cheese', label: 'Breakfast till noon' },
   ],
   source: 'Menu board photographed by the RhodyFind team (Nov 2026)',
   footnote: 'Please inform your server of any food allergies.',
@@ -41,7 +41,7 @@ export const ALBIES_MENU: Menu = {
       icon: 'egg-fried',
       title: 'Breakfast Sandwiches',
       kind: 'breakfast',
-      notes: ['Served all day'],
+      notes: ['Served until 12 noon'],
       items: [
         { name: '1 Egg & Cheese', desc: 'On toast or English muffin', options: [{ label: 'Egg & cheese', price: 2.99 }, { label: 'Add bacon, ham or sausage', price: 4.39 }], star: true },
         { name: 'Eggs & Cheese', options: eggs(4.39, 5.99), star: true },

@@ -1,4 +1,5 @@
 import { ALBIES_MENU } from './albies';
+import { TASTE_OF_KOREA_MENU } from './tasteOfKorea';
 import type { Menu, MenuItem, MenuKind, MenuOption, MenuSection } from './types';
 
 export type { Menu, MenuItem, MenuKind, MenuOption, MenuSection } from './types';
@@ -6,6 +7,7 @@ export type { Menu, MenuItem, MenuKind, MenuOption, MenuSection } from './types'
 /** Restaurants with a menu we've transcribed, by place id. */
 export const MENUS: Record<string, Menu> = {
   [ALBIES_MENU.placeId]: ALBIES_MENU,
+  [TASTE_OF_KOREA_MENU.placeId]: TASTE_OF_KOREA_MENU,
 };
 
 export const menuFor = (placeId: string): Menu | undefined => MENUS[placeId];
@@ -32,8 +34,8 @@ export type PriceAverage = {
  * price: the plain sub, not the combo; the small fries, not the large. Sides,
  * add-ons and desserts are left out of the meal averages.
  *
- * When breakfast and lunch/dinner come off one all-day menu (as at Albie's),
- * lunch and dinner are the same number, so they're shown together.
+ * Lunch and dinner come off the same menu at the restaurants listed so far,
+ * so they're one number, shown together.
  */
 export function menuAverages(menu: Menu): PriceAverage[] {
   const groups: { label: string; kinds: MenuKind[]; note?: string }[] = [
