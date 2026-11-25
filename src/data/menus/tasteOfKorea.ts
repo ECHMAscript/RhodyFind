@@ -13,6 +13,7 @@ export const TASTE_OF_KOREA_MENU: Menu = {
   name: 'Taste of Korea',
   phone: '401-363-9777',
   kicker: 'Kingston Emporium',
+  theme: 'korean',
   signLines: ['Taste of KOREA · 401-363-9777', 'Boba Tea (neon sign in the window)'],
   featured: [
     {

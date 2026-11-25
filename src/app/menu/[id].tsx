@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import {
   Animated,
   Image,
@@ -18,18 +18,38 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Header } from '@/components/Header';
+import {
+  CardSprig,
+  CardWaves,
+  FeaturedDecor,
+  KoreanBackdrop,
+  KoreanHeroDecor,
+  MENU_THEMES,
+  TaegeukDivider,
+  TitleFlick,
+  type MenuTheme,
+} from '@/components/menu/theme';
 import type { IconName } from '@/data/locations';
 import { itemOptions, menuAverages, menuFor, money, type Menu, type MenuItem, type MenuOption, type MenuSection } from '@/data/menus';
 import { PHOTOS } from '@/data/photos';
 import { PLACE_DETAILS } from '@/data/placeDetails';
 import { breakpoints, colors, imageFill, radius, shadow } from '@/theme';
 
-// The board's neon pink and cyan, deepened enough to read on white. They keep
-// a bit of the real menu's look inside the site's navy-and-Keaney design.
-const PINK = '#D81B7A';
-const PINK_GLOW = '#FF2E93';
-const CYAN = '#1BB5D3';
-const CYAN_GLOW = '#3FE0F5';
+// Each menu picks a theme (components/menu/theme.tsx): Albie's keeps its neon
+// board's pink and cyan; Taste of Korea gets taegeuk red and blue with hanok,
+// blossom and wave decorations. Styles are built once per theme.
+type Styles = ReturnType<typeof makeStyles>;
+const styleCache = new Map<string, Styles>();
+function stylesFor(t: MenuTheme): Styles {
+  let st = styleCache.get(t.key);
+  if (!st) styleCache.set(t.key, (st = makeStyles(t)));
+  return st;
+}
+const ThemeContext = createContext<{ t: MenuTheme; styles: Styles } | null>(null);
+function useMenuTheme() {
+  return useContext(ThemeContext) ?? { t: MENU_THEMES.board, styles: stylesFor(MENU_THEMES.board) };
+}
+
 const SERIF = Platform.select({ web: 'Georgia, "Times New Roman", serif', default: undefined });
 
 type OrderLine = { key: string; name: string; option: string; price: number; qty: number };
@@ -40,6 +60,9 @@ type Featured = { label: string; blurb?: string; item: MenuItem; section: MenuSe
 export default function MenuScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const menu = id ? menuFor(id) : undefined;
+  const t = MENU_THEMES[menu?.theme ?? 'board'];
+  const styles = stylesFor(t);
+  const korean = t.key === 'korean';
   const details = id ? PLACE_DETAILS[id] : undefined;
   const hours = splitHours(details?.hours);
   const { width } = useWindowDimensions();
@@ -171,170 +194,176 @@ export default function MenuScreen() {
   const activeId = active ?? menu.sections[0].id;
 
   return (
-    <View style={styles.screen}>
-      <Header />
-      <View ref={frame} style={{ flex: 1 }}>
-        <ScrollView
-          ref={scroll}
-          contentContainerStyle={[styles.scroll, !wide && count > 0 && { paddingBottom: 110 }]}
-          stickyHeaderIndices={[1]}
-          scrollEventThrottle={64}
-          onScroll={(e) => {
-            offset.current = e.nativeEvent.contentOffset.y;
-            trackActive();
-          }}
-        >
-          {/* 0: Hero */}
-          <Hero compact={compact} wide={wide} menu={menu} photo={details?.photo} address={details?.address} onBack={back} />
+    <ThemeContext.Provider value={{ t, styles }}>
+      <View style={styles.screen}>
+        <Header />
+        <View ref={frame} style={{ flex: 1 }}>
+          {korean && <KoreanBackdrop compact={compact} width={width} />}
+          <ScrollView
+            ref={scroll}
+            contentContainerStyle={[styles.scroll, !wide && count > 0 && { paddingBottom: 110 }]}
+            stickyHeaderIndices={[1]}
+            scrollEventThrottle={64}
+            onScroll={(e) => {
+              offset.current = e.nativeEvent.contentOffset.y;
+              trackActive();
+            }}
+          >
+            {/* 0: Hero */}
+            <Hero compact={compact} wide={wide} menu={menu} photo={details?.photo} address={details?.address} onBack={back} />
 
-          {/* 1: Sticky section tabs + search */}
-          <View style={styles.stickyWrap} onLayout={(e) => setStickyHeight(e.nativeEvent.layout.height)}>
-            <View style={[styles.page, compact && styles.pageCompact]}>
-              <View style={[styles.tabBar, compact && styles.tabBarCompact]}>
-                <ScrollView
-                  ref={tabsScroll}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.tabs}
-                  style={compact ? undefined : { flex: 1 }}
-                >
-                  {menu.sections.map((s) => {
-                    const on = s.id === activeId;
-                    return (
-                      <Pressable
-                        key={s.id}
-                        onLayout={(e) => (tabX.current[s.id] = e.nativeEvent.layout.x)}
-                        onPress={() => jump(s.id)}
-                        style={({ hovered }: any) => [styles.tab, on && styles.tabOn, !on && hovered && styles.tabHover]}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: on }}
-                      >
-                        <MaterialCommunityIcons name={s.icon} size={18} color={on ? colors.white : colors.navy} />
-                        <Text style={[styles.tabText, on && styles.tabTextOn]}>{s.title}</Text>
-                        {on && <View style={styles.tabUnderline} />}
+            {/* 1: Sticky section tabs + search */}
+            <View style={styles.stickyWrap} onLayout={(e) => setStickyHeight(e.nativeEvent.layout.height)}>
+              <View style={[styles.page, compact && styles.pageCompact]}>
+                <View style={[styles.tabBar, compact && styles.tabBarCompact]}>
+                  <ScrollView
+                    ref={tabsScroll}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.tabs}
+                    style={compact ? undefined : { flex: 1 }}
+                  >
+                    {menu.sections.map((s) => {
+                      const on = s.id === activeId;
+                      return (
+                        <Pressable
+                          key={s.id}
+                          onLayout={(e) => (tabX.current[s.id] = e.nativeEvent.layout.x)}
+                          onPress={() => jump(s.id)}
+                          style={({ hovered }: any) => [styles.tab, on && styles.tabOn, !on && hovered && styles.tabHover]}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: on }}
+                        >
+                          <MaterialCommunityIcons name={s.icon} size={18} color={on ? colors.white : colors.navy} />
+                          <Text style={[styles.tabText, on && styles.tabTextOn]}>{s.title}</Text>
+                          {on && <View style={styles.tabUnderline} />}
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <View style={[styles.search, compact && styles.searchCompact]}>
+                    <MaterialCommunityIcons name="magnify" size={20} color={colors.textMuted} />
+                    <TextInput
+                      value={query}
+                      onChangeText={setQuery}
+                      placeholder="Search the menu"
+                      placeholderTextColor={colors.textMuted}
+                      style={styles.searchInput}
+                      accessibilityLabel="Search the menu"
+                    />
+                    {!!query && (
+                      <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search" hitSlop={8}>
+                        <MaterialCommunityIcons name="close-circle" size={18} color={colors.textMuted} />
                       </Pressable>
-                    );
-                  })}
-                </ScrollView>
-                <View style={[styles.search, compact && styles.searchCompact]}>
-                  <MaterialCommunityIcons name="magnify" size={20} color={colors.textMuted} />
-                  <TextInput
-                    value={query}
-                    onChangeText={setQuery}
-                    placeholder="Search the menu"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.searchInput}
-                    accessibilityLabel="Search the menu"
-                  />
-                  {!!query && (
-                    <Pressable onPress={() => setQuery('')} accessibilityLabel="Clear search" hitSlop={8}>
-                      <MaterialCommunityIcons name="close-circle" size={18} color={colors.textMuted} />
-                    </Pressable>
-                  )}
+                    )}
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          {/* 2: Featured + quick facts, then the menu */}
-          <View style={[styles.page, compact && styles.pageCompact, { gap: 30 }]}>
-            {!query && (
-              <View style={[styles.topRow, wide && styles.topRowWide]}>
-                {featured.length > 0 && <FeaturedCard items={featured} onAdd={add} compact={compact} style={wide ? { flex: 1.5 } : undefined} />}
-                <View style={[styles.infoCards, wide && { flex: 2 }]}>
-                  <InfoCard icon="clock-outline" color={CYAN} title="Hours">
-                    <Text style={styles.infoText}>{hours.main}</Text>
-                    {!!hours.note && <Text style={styles.infoSmall}>{hours.note}</Text>}
-                  </InfoCard>
-                  <InfoCard icon="silverware-fork-knife" color={colors.navy} title="Average prices">
-                    {averages
-                      .filter((a) => a.label !== 'Desserts')
-                      .map((a) => (
-                        <View key={a.label} style={styles.avgRow}>
-                          <Text style={styles.avgLabel}>{a.label}</Text>
-                          <Text style={styles.avgValue}>~{money(a.average)}</Text>
-                        </View>
-                      ))}
-                  </InfoCard>
-                  {!!menu.signLines?.length && (
-                    <InfoCard icon="star" color={PINK} title="On the sign">
-                      {menu.signLines.map((l) => (
-                        <View key={l} style={styles.signRow}>
-                          <MaterialCommunityIcons name="check" size={16} color={PINK} />
-                          <Text style={styles.signText}>{l}</Text>
-                        </View>
-                      ))}
-                    </InfoCard>
+            {/* 2: Featured + quick facts, then the menu */}
+            <View style={[styles.page, compact && styles.pageCompact, { gap: 30 }]}>
+              {!query && (
+                <View style={[styles.topRow, wide && styles.topRowWide]}>
+                  {featured.length > 0 && (
+                    <FeaturedCard items={featured} onAdd={add} compact={compact} style={wide ? { flex: 1.5 } : undefined} />
                   )}
+                  <View style={[styles.infoCards, wide && { flex: 2 }]}>
+                    <InfoCard icon="clock-outline" color={korean ? t.accent : t.second} title="Hours">
+                      <Text style={styles.infoText}>{hours.main}</Text>
+                      {!!hours.note && <Text style={styles.infoSmall}>{hours.note}</Text>}
+                    </InfoCard>
+                    <InfoCard icon="silverware-fork-knife" color={colors.navy} title="Average prices">
+                      {averages
+                        .filter((a) => a.label !== 'Desserts')
+                        .map((a) => (
+                          <View key={a.label} style={styles.avgRow}>
+                            <Text style={styles.avgLabel}>{a.label}</Text>
+                            <Text style={styles.avgValue}>~{money(a.average)}</Text>
+                          </View>
+                        ))}
+                    </InfoCard>
+                    {!!menu.signLines?.length && (
+                      <InfoCard icon="star" color={t.accent} title="On the sign" decor={korean && <CardSprig />}>
+                        {menu.signLines.map((l) => (
+                          <View key={l} style={styles.signRow}>
+                            <MaterialCommunityIcons name="check" size={16} color={t.accent} />
+                            <Text style={styles.signText}>{l}</Text>
+                          </View>
+                        ))}
+                      </InfoCard>
+                    )}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            <View style={[styles.body, wide && styles.bodyWide]}>
-              <View style={[styles.menuCol, wide && { flex: 1 }]}>
-                {sections.length === 0 && <Text style={styles.empty}>Nothing on the menu matches “{query}”.</Text>}
-                {sections.map((s) => (
-                  <View key={s.id} ref={(r) => void (sectionRefs.current[s.id] = r)} style={styles.section}>
-                    <SectionHead section={s} />
-                    <View style={styles.items}>
-                      {s.items.map((item) => (
-                        <ItemRow
-                          key={item.name}
-                          item={item}
-                          section={s}
-                          compact={compact}
-                          count={countOf(item)}
-                          countOfOption={(label) => countOfOption(item, label)}
-                          onAdd={add}
-                        />
+              <View style={[styles.body, wide && styles.bodyWide]}>
+                <View style={[styles.menuCol, wide && { flex: 1 }]}>
+                  {sections.length === 0 && <Text style={styles.empty}>Nothing on the menu matches “{query}”.</Text>}
+                  {sections.map((s) => (
+                    <View key={s.id} ref={(r) => void (sectionRefs.current[s.id] = r)} style={styles.section}>
+                      <SectionHead section={s} />
+                      <View style={styles.items}>
+                        {s.items.map((item) => (
+                          <ItemRow
+                            key={item.name}
+                            item={item}
+                            section={s}
+                            compact={compact}
+                            count={countOf(item)}
+                            countOfOption={(label) => countOfOption(item, label)}
+                            onAdd={add}
+                          />
+                        ))}
+                      </View>
+                      {s.footnotes?.map((f) => (
+                        <View key={f} style={styles.footnote}>
+                          <MaterialCommunityIcons name="information-outline" size={18} color={colors.keaney} />
+                          <Text style={styles.footnoteText}>{f}</Text>
+                        </View>
                       ))}
                     </View>
-                    {s.footnotes?.map((f) => (
-                      <View key={f} style={styles.footnote}>
-                        <MaterialCommunityIcons name="information-outline" size={18} color={colors.keaney} />
-                        <Text style={styles.footnoteText}>{f}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-                {menu.footnote && (
-                  <View style={styles.allergy}>
-                    <MaterialCommunityIcons name="alert-circle-outline" size={20} color={PINK} />
-                    <Text style={styles.allergyText}>{menu.footnote}</Text>
-                  </View>
-                )}
-                <Text style={styles.credit}>
-                  {menu.source}. Prices may have changed; totals are estimates before tax. Banner photo: The Quad ({PHOTOS.quad.credit}).
-                </Text>
-              </View>
+                  ))}
+                  {menu.footnote && (
+                    <View style={styles.allergy}>
+                      <MaterialCommunityIcons name="alert-circle-outline" size={20} color={t.accent} />
+                      <Text style={styles.allergyText}>{menu.footnote}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.credit}>
+                    {menu.source}. Prices may have changed; totals are estimates before tax.
+                    {korean ? ' Illustrations: RhodyFind.' : ` Banner photo: The Quad (${PHOTOS.quad.credit}).`}
+                  </Text>
+                </View>
 
-              {/* Desktop: the order estimate rides along beside the menu */}
-              {wide && <View style={[styles.sideCol, { top: stickyHeight + 16 } as object]}>{orderPanel}</View>}
+                {/* Desktop: the order estimate rides along beside the menu */}
+                {wide && <View style={[styles.sideCol, { top: stickyHeight + 16 } as object]}>{orderPanel}</View>}
+              </View>
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Phones and tablets: the order estimate as a tray at the bottom */}
+        {!wide && count > 0 && (
+          <View style={styles.trayWrap} pointerEvents="box-none">
+            <View style={styles.tray}>
+              {trayOpen && <View style={styles.trayBody}>{orderPanel}</View>}
+              <Pressable onPress={() => setTrayOpen((v) => !v)} style={styles.trayBar} accessibilityRole="button">
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{count}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.trayTitle}>Your order</Text>
+                  <Text style={styles.traySub}>{trayOpen ? 'Tap to hide' : 'Tap to see items'} · before tax</Text>
+                </View>
+                <Text style={styles.trayTotal}>{money(total)}</Text>
+                <MaterialCommunityIcons name={trayOpen ? 'chevron-down' : 'chevron-up'} size={22} color={colors.white} />
+              </Pressable>
             </View>
           </View>
-        </ScrollView>
+        )}
       </View>
-
-      {/* Phones and tablets: the order estimate as a tray at the bottom */}
-      {!wide && count > 0 && (
-        <View style={styles.trayWrap} pointerEvents="box-none">
-          <View style={styles.tray}>
-            {trayOpen && <View style={styles.trayBody}>{orderPanel}</View>}
-            <Pressable onPress={() => setTrayOpen((v) => !v)} style={styles.trayBar} accessibilityRole="button">
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{count}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.trayTitle}>Your order</Text>
-                <Text style={styles.traySub}>{trayOpen ? 'Tap to hide' : 'Tap to see items'} · before tax</Text>
-              </View>
-              <Text style={styles.trayTotal}>{money(total)}</Text>
-              <MaterialCommunityIcons name={trayOpen ? 'chevron-down' : 'chevron-up'} size={22} color={colors.white} />
-            </Pressable>
-          </View>
-        </View>
-      )}
-    </View>
+    </ThemeContext.Provider>
   );
 }
 
@@ -366,17 +395,25 @@ function Hero({
   address?: string;
   onBack: () => void;
 }) {
+  const { t, styles } = useMenuTheme();
+  const { width } = useWindowDimensions();
   const openMap = () => router.push(`/map?to=${menu.placeId}`);
   return (
     <View style={styles.hero}>
-      <Image source={PHOTOS.quad.source} style={[imageFill, { opacity: 0.32 }]} resizeMode="cover" />
-      <LinearGradient
-        colors={['rgba(234,243,252,0.5)', 'rgba(234,243,252,0.85)', colors.background]}
-        locations={[0, 0.65, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-      <View style={[styles.wave, { width: 900, height: 900, right: -460, top: -620 }]} pointerEvents="none" />
-      <View style={[styles.wave, { width: 700, height: 700, left: -420, top: -480, opacity: 0.6 }]} pointerEvents="none" />
+      {t.key === 'korean' ? (
+        <KoreanHeroDecor compact={compact} width={width} />
+      ) : (
+        <>
+          <Image source={PHOTOS.quad.source} style={[imageFill, { opacity: 0.32 }]} resizeMode="cover" />
+          <LinearGradient
+            colors={['rgba(234,243,252,0.5)', 'rgba(234,243,252,0.85)', colors.background]}
+            locations={[0, 0.65, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={[styles.wave, { width: 900, height: 900, right: -460, top: -620 }]} pointerEvents="none" />
+          <View style={[styles.wave, { width: 700, height: 700, left: -420, top: -480, opacity: 0.6 }]} pointerEvents="none" />
+        </>
+      )}
 
       <View style={[styles.page, compact && styles.pageCompact, { gap: 16 }]}>
         <Pressable style={styles.back} onPress={onBack} accessibilityRole="button">
@@ -399,6 +436,7 @@ function Hero({
                 <View style={[styles.kickerLine, compact && { width: 30 }]} />
               </View>
             )}
+            {t.key === 'korean' && <TaegeukDivider />}
             {menu.tagline && <Text style={[styles.tagline, compact && { fontSize: 16 }]}>{menu.tagline}</Text>}
           </View>
           {/* Keeps the title centered on the page when the photo sits to its left. */}
@@ -407,7 +445,9 @@ function Hero({
 
         <View style={styles.pills}>
           {address && <InfoPill icon="map-marker" text={address.replace(' (Kingston Emporium)', '')} onPress={openMap} />}
-          {menu.phone && <InfoPill icon="phone" text={menu.phone} onPress={() => Linking.openURL(`tel:${menu.phone!.replace(/[^\d+]/g, '')}`)} />}
+          {menu.phone && (
+            <InfoPill icon="phone" text={menu.phone} onPress={() => Linking.openURL(`tel:${menu.phone!.replace(/[^\d+]/g, '')}`)} />
+          )}
           {menu.website && (
             <InfoPill icon="web" text={menu.website.replace(/^https?:\/\/(www\.)?/, '')} onPress={() => Linking.openURL(menu.website!)} />
           )}
@@ -416,7 +456,7 @@ function Hero({
             style={({ hovered }: any) => [styles.mapButton, hovered && { backgroundColor: colors.navySoft }]}
             accessibilityRole="button"
           >
-            <MaterialCommunityIcons name="silverware-fork-knife" size={18} color={PINK_GLOW} />
+            <MaterialCommunityIcons name="silverware-fork-knife" size={18} color={t.accentGlow} />
             <Text style={styles.mapButtonText}>View on Map</Text>
             <MaterialCommunityIcons name="arrow-top-right" size={16} color={colors.white} />
           </Pressable>
@@ -427,9 +467,10 @@ function Hero({
 }
 
 function InfoPill({ icon, text, onPress }: { icon: IconName; text: string; onPress: () => void }) {
+  const { t, styles } = useMenuTheme();
   return (
     <Pressable onPress={onPress} style={({ hovered }: any) => [styles.pill, hovered && styles.pillHover]} accessibilityRole="link">
-      <MaterialCommunityIcons name={icon} size={18} color={colors.keaney} />
+      <MaterialCommunityIcons name={icon} size={18} color={t.key === 'korean' ? t.second : colors.keaney} />
       <Text style={styles.pillText} numberOfLines={1}>
         {text}
       </Text>
@@ -439,6 +480,7 @@ function InfoPill({ icon, text, onPress }: { icon: IconName; text: string; onPre
 
 /** A rotating spotlight on a few board favorites, lit like the neon menu board. */
 function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onAdd: AddFn; compact: boolean; style?: object }) {
+  const { t, styles } = useMenuTheme();
   const [shown, setShown] = useState(0);
   const [paused, setPaused] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
@@ -491,7 +533,8 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
       onTouchCancel={() => setPaused(false)}
       {...({ onMouseEnter: () => setPaused(true), onMouseLeave: () => setPaused(false) } as object)}
     >
-      <LinearGradient colors={[colors.navy, '#0D3470']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={t.featured} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      {t.key === 'korean' && <FeaturedDecor compact={compact} />}
       <Animated.View
         style={[styles.featuredInner, compact && styles.featuredInnerCompact, { opacity: fade, transform: [{ translateX: dragX }] }]}
       >
@@ -522,7 +565,9 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
                 accessibilityLabel={`Add ${f.item.name}, ${first.label}, ${money(first.price)}`}
               >
                 <MaterialCommunityIcons name={justAdded ? 'check' : 'plus'} size={16} color={colors.white} />
-                <Text style={styles.featuredAddText}>{justAdded ? 'Added' : first.label === 'Price' ? 'Add' : `Add ${first.label.toLowerCase()}`}</Text>
+                <Text style={styles.featuredAddText}>
+                  {justAdded ? 'Added' : first.label === 'Price' ? 'Add' : `Add ${first.label.toLowerCase()}`}
+                </Text>
               </Pressable>
             </View>
           )}
@@ -544,9 +589,25 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
   );
 }
 
-function InfoCard({ icon, color, title, children }: { icon: IconName; color: string; title: string; children: ReactNode }) {
+function InfoCard({
+  icon,
+  color,
+  title,
+  children,
+  decor,
+}: {
+  icon: IconName;
+  color: string;
+  title: string;
+  children: ReactNode;
+  /** Extra decoration, drawn behind the content. */
+  decor?: ReactNode;
+}) {
+  const { t, styles } = useMenuTheme();
   return (
     <View style={styles.infoCard}>
+      {t.key === 'korean' && <CardWaves />}
+      {decor}
       <View style={[styles.infoIcon, { backgroundColor: `${color}1A` }]}>
         <MaterialCommunityIcons name={icon} size={22} color={color} />
       </View>
@@ -557,11 +618,15 @@ function InfoCard({ icon, color, title, children }: { icon: IconName; color: str
 }
 
 function SectionHead({ section }: { section: MenuSection }) {
+  const { t, styles } = useMenuTheme();
   return (
     <View style={styles.sectionHead}>
       <View style={styles.sectionBar} />
       <View style={{ flex: 1, gap: 4 }}>
-        <Text style={styles.sectionTitle}>{section.title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          {t.key === 'korean' && <TitleFlick />}
+        </View>
         {section.notes?.map((n) => (
           <Text key={n} style={styles.sectionNote}>
             {n}
@@ -597,13 +662,14 @@ function ItemRow({
   countOfOption: (label: string) => number;
   onAdd: AddFn;
 }) {
+  const { t, styles } = useMenuTheme();
   const options = itemOptions(item, section);
   const several = options.length > 1;
   const first = options[0];
   return (
     <View style={[styles.item, compact && styles.itemCompact, count > 0 && styles.itemOn]}>
       <View style={[styles.thumb, compact && styles.thumbCompact]}>
-        <MaterialCommunityIcons name={section.icon} size={compact ? 24 : 30} color={colors.navy} />
+        <MaterialCommunityIcons name={section.icon} size={compact ? 24 : 30} color={t.thumbIcon} />
         {item.star && (
           <View style={styles.thumbStar}>
             <MaterialCommunityIcons name="star" size={11} color={colors.white} />
@@ -632,7 +698,7 @@ function ItemRow({
                   accessibilityRole="button"
                   accessibilityLabel={`Add ${item.name}, ${o.label}, ${money(o.price)}`}
                 >
-                  {n > 0 ? <Text style={styles.optionCount}>{n}×</Text> : <MaterialCommunityIcons name="plus" size={14} color={PINK} />}
+                  {n > 0 ? <Text style={styles.optionCount}>{n}×</Text> : <MaterialCommunityIcons name="plus" size={14} color={t.accent} />}
                   <Text style={styles.optionLabel}>{o.label}</Text>
                   <Text style={styles.optionPrice}>{money(o.price)}</Text>
                 </Pressable>
@@ -650,11 +716,16 @@ function ItemRow({
           {!several && (
             <Pressable
               onPress={() => onAdd(item, first)}
-              style={({ hovered }: any) => [styles.add, compact && styles.addCompact, hovered && styles.addHover, count > 0 && styles.addOn]}
+              style={({ hovered }: any) => [
+                styles.add,
+                compact && styles.addCompact,
+                hovered && styles.addHover,
+                count > 0 && styles.addOn,
+              ]}
               accessibilityRole="button"
               accessibilityLabel={`Add ${item.name}, ${money(first.price)}`}
             >
-              <MaterialCommunityIcons name={count > 0 ? 'check' : 'plus'} size={16} color={count > 0 ? colors.white : PINK} />
+              <MaterialCommunityIcons name={count > 0 ? 'check' : 'plus'} size={16} color={count > 0 ? colors.white : t.accent} />
               <Text style={[styles.addText, count > 0 && { color: colors.white }]}>{count > 0 ? `${count}` : 'Add'}</Text>
             </Pressable>
           )}
@@ -679,11 +750,13 @@ function OrderPanel({
   onClear: () => void;
   phoneUrl?: string;
 }) {
+  const { t, styles } = useMenuTheme();
   return (
     <View style={styles.orderCard}>
+      {t.key === 'korean' && <CardWaves />}
       <View style={styles.orderHead}>
-        <View style={[styles.infoIcon, { backgroundColor: `${PINK}1A` }]}>
-          <MaterialCommunityIcons name="receipt-text-outline" size={22} color={PINK} />
+        <View style={[styles.infoIcon, { backgroundColor: `${t.accent}1A` }]}>
+          <MaterialCommunityIcons name="receipt-text-outline" size={22} color={t.accent} />
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.infoTitle}>Your order</Text>
@@ -718,7 +791,7 @@ function OrderPanel({
         <Text style={styles.totalLabel}>Estimated total</Text>
         <Text style={styles.totalValue}>{money(total)}</Text>
       </View>
-      <Text style={styles.infoSmall}>Before tax. Prices are from the menu board and may have changed.</Text>
+      <Text style={styles.infoSmall}>Before tax. Prices may have changed since they were checked.</Text>
       <View style={styles.orderButtons}>
         {phoneUrl && (
           <Pressable
@@ -746,357 +819,402 @@ const softShadow = { ...shadow.card, shadowOpacity: 0.08 };
 // Korean names wrap between words, not mid-word (CSS breaks Hangul anywhere by default).
 const KEEP_WORDS = Platform.OS === 'web' ? ({ wordBreak: 'keep-all' } as object) : {};
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
-  scroll: { paddingBottom: 48 },
-  page: { width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: 32 },
-  pageCompact: { paddingHorizontal: 14 },
-  back: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
-  backText: { color: colors.navy, fontWeight: '700', fontSize: 15 },
+const makeStyles = (t: MenuTheme) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: t.background },
+    scroll: { paddingBottom: 48 },
+    page: { width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: 32 },
+    pageCompact: { paddingHorizontal: 14 },
+    back: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
+    backText: { color: colors.navy, fontWeight: '700', fontSize: 15 },
 
-  // Hero
-  hero: { paddingTop: 18, paddingBottom: 18, overflow: 'hidden' },
-  wave: { position: 'absolute', borderRadius: 9999, borderWidth: 28, borderColor: 'rgba(104,171,232,0.16)' },
-  heroMain: { alignItems: 'center', gap: 16 },
-  heroMainWide: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
-  heroPhoto: {
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    borderWidth: 5,
-    borderColor: colors.white,
-    backgroundColor: colors.keaneyTint,
-    ...shadow.card,
-  },
-  heroPhotoWide: { width: 250, height: 172, transform: [{ rotate: '-2deg' }] },
-  heroPhotoNarrow: { width: '100%', maxWidth: 520, height: 170 },
-  heroBalance: { width: 250 },
-  heroText: { alignItems: 'center', gap: 8, flexShrink: 1 },
-  heroTitle: {
-    fontSize: 72,
-    lineHeight: 80,
-    fontWeight: '900',
-    fontStyle: 'italic',
-    color: colors.navy,
-    letterSpacing: -1.5,
-    textAlign: 'center',
-  },
-  heroTitleCompact: { fontSize: 44, lineHeight: 50 },
-  kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  kickerLine: { width: 56, height: 3, borderRadius: 2, backgroundColor: PINK_GLOW },
-  kicker: { fontSize: 16, fontWeight: '700', letterSpacing: 7, color: colors.navy },
-  kickerCompact: { fontSize: 13, letterSpacing: 3 },
-  tagline: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: colors.navy, textAlign: 'center' },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 4 },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 46,
-    paddingHorizontal: 18,
-    borderRadius: radius.pill,
-    backgroundColor: colors.white,
-    maxWidth: '100%',
-    ...softShadow,
-  },
-  pillHover: { backgroundColor: colors.keaneyTint },
-  pillText: { fontSize: 15, color: colors.text, flexShrink: 1 },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 46,
-    paddingHorizontal: 20,
-    borderRadius: radius.pill,
-    backgroundColor: colors.navy,
-    borderBottomWidth: 3,
-    borderBottomColor: PINK_GLOW,
-  },
-  mapButtonText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+    // Hero
+    hero: { paddingTop: 18, paddingBottom: 18, overflow: 'hidden' },
+    wave: { position: 'absolute', borderRadius: 9999, borderWidth: 28, borderColor: 'rgba(104,171,232,0.16)' },
+    heroMain: { alignItems: 'center', gap: 16 },
+    heroMainWide: { flexDirection: 'row', justifyContent: 'center', gap: 32 },
+    heroPhoto: {
+      borderRadius: radius.lg,
+      overflow: 'hidden',
+      borderWidth: 5,
+      borderColor: colors.white,
+      backgroundColor: colors.keaneyTint,
+      ...shadow.card,
+    },
+    heroPhotoWide: { width: 250, height: 172, transform: [{ rotate: '-2deg' }] },
+    heroPhotoNarrow: { width: '100%', maxWidth: 520, height: 170 },
+    heroBalance: { width: 250 },
+    heroText: { alignItems: 'center', gap: 8, flexShrink: 1 },
+    heroTitle: {
+      fontSize: 72,
+      lineHeight: 80,
+      fontWeight: '900',
+      fontStyle: 'italic',
+      color: colors.navy,
+      letterSpacing: -1.5,
+      textAlign: 'center',
+    },
+    heroTitleCompact: { fontSize: 44, lineHeight: 50 },
+    kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    kickerLine: { width: 56, height: 3, borderRadius: 2, backgroundColor: t.accentGlow },
+    kicker: { fontSize: 16, fontWeight: '700', letterSpacing: 7, color: colors.navy },
+    kickerCompact: { fontSize: 13, letterSpacing: 3 },
+    tagline: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: colors.navy, textAlign: 'center' },
+    pills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 4 },
+    pill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 46,
+      paddingHorizontal: 18,
+      borderRadius: radius.pill,
+      backgroundColor: colors.white,
+      maxWidth: '100%',
+      ...softShadow,
+    },
+    pillHover: { backgroundColor: colors.keaneyTint },
+    pillText: { fontSize: 15, color: colors.text, flexShrink: 1 },
+    mapButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      height: 46,
+      paddingHorizontal: 20,
+      borderRadius: radius.pill,
+      backgroundColor: colors.navy,
+      borderBottomWidth: 3,
+      borderBottomColor: t.accentGlow,
+    },
+    mapButtonText: { color: colors.white, fontWeight: '800', fontSize: 15 },
 
-  // Sticky tabs
-  stickyWrap: { paddingVertical: 10, backgroundColor: colors.background },
-  tabBar: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 6, borderRadius: radius.pill, backgroundColor: colors.white, ...softShadow },
-  tabBarCompact: { flexDirection: 'column', alignItems: 'stretch', gap: 6, borderRadius: radius.lg },
-  tabs: { gap: 4, paddingRight: 6 },
-  tab: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 16, borderRadius: radius.pill },
-  tabOn: { backgroundColor: colors.navy },
-  tabHover: { backgroundColor: colors.keaneyTint },
-  tabText: { fontSize: 15, fontWeight: '700', color: colors.navy },
-  tabTextOn: { color: colors.white },
-  tabUnderline: { position: 'absolute', left: 22, right: 22, bottom: 4, height: 3, borderRadius: 2, backgroundColor: PINK_GLOW },
-  search: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    width: 230,
-    height: 44,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    backgroundColor: colors.background,
-  },
-  searchCompact: { width: '100%' },
-  // 16px so iPhones don't zoom in on focus.
-  searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: colors.text, height: '100%', outlineStyle: 'none' } as object,
+    // Sticky tabs
+    stickyWrap: { paddingVertical: 10, backgroundColor: t.background },
+    tabBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 6,
+      borderRadius: radius.pill,
+      backgroundColor: colors.white,
+      ...softShadow,
+    },
+    tabBarCompact: { flexDirection: 'column', alignItems: 'stretch', gap: 6, borderRadius: radius.lg },
+    tabs: { gap: 4, paddingRight: 6 },
+    tab: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 16, borderRadius: radius.pill },
+    tabOn: { backgroundColor: colors.navy },
+    tabHover: { backgroundColor: colors.keaneyTint },
+    tabText: { fontSize: 15, fontWeight: '700', color: colors.navy },
+    tabTextOn: { color: colors.white },
+    tabUnderline: { position: 'absolute', left: 22, right: 22, bottom: 4, height: 3, borderRadius: 2, backgroundColor: t.accentGlow },
+    search: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      width: 230,
+      height: 44,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
+      backgroundColor: colors.background,
+    },
+    searchCompact: { width: '100%' },
+    // 16px so iPhones don't zoom in on focus.
+    searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: colors.text, height: '100%', outlineStyle: 'none' } as object,
 
-  // Featured + info cards
-  topRow: { gap: 16, marginTop: 8 },
-  topRowWide: { flexDirection: 'row', alignItems: 'stretch' },
-  featured: { borderRadius: radius.xl, overflow: 'hidden', minHeight: 220, ...shadow.card },
-  featuredInner: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 26, padding: 26, paddingBottom: 36 },
-  featuredInnerCompact: { gap: 16, padding: 18, paddingBottom: 34 },
-  neonRing: {
-    width: 132,
-    height: 132,
-    borderRadius: 66,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: PINK_GLOW,
-    backgroundColor: 'rgba(255,46,147,0.08)',
-    shadowColor: PINK_GLOW,
-    shadowOpacity: 0.9,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 0 },
-  },
-  neonRingCompact: { width: 88, height: 88, borderRadius: 44, borderWidth: 3 },
-  neonIcon: { textShadowColor: CYAN_GLOW, textShadowRadius: 14, textShadowOffset: { width: 0, height: 0 } },
-  featuredTag: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    height: 26,
-    justifyContent: 'center',
-    borderRadius: radius.pill,
-    backgroundColor: PINK_GLOW,
-  },
-  featuredTagText: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
-  featuredName: { color: colors.white, fontWeight: '800', fontSize: 32, lineHeight: 38, ...KEEP_WORDS },
-  featuredNameCompact: { fontSize: 23, lineHeight: 28 },
-  featuredDesc: { color: '#CFE2F7', fontStyle: 'italic', fontSize: 15, lineHeight: 21 },
-  featuredActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 6 },
-  featuredPrice: {
-    color: colors.white,
-    fontWeight: '800',
-    fontSize: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-    borderWidth: 2.5,
-    borderColor: CYAN_GLOW,
-    textShadowColor: CYAN_GLOW,
-    textShadowRadius: 8,
-    textShadowOffset: { width: 0, height: 0 },
-  },
-  featuredAdd: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 38,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.5)',
-  },
-  featuredAddText: { color: colors.white, fontWeight: '700', fontSize: 14 },
-  // Web: let the browser keep vertical scrolling, and hand sideways drags to the swipe.
-  swipeable: Platform.OS === 'web' ? ({ touchAction: 'pan-y', userSelect: 'none' } as object) : {},
-  dots: { position: 'absolute', right: 22, bottom: 14, flexDirection: 'row', gap: 8 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.45)' },
-  dotOn: { backgroundColor: PINK_GLOW, width: 22 },
+    // Featured + info cards
+    topRow: { gap: 16, marginTop: 8 },
+    topRowWide: { flexDirection: 'row', alignItems: 'stretch' },
+    featured: { borderRadius: radius.xl, overflow: 'hidden', minHeight: 220, ...shadow.card },
+    featuredInner: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 26, padding: 26, paddingBottom: 36 },
+    featuredInnerCompact: { gap: 16, padding: 18, paddingBottom: 34 },
+    neonRing: {
+      width: 132,
+      height: 132,
+      borderRadius: 66,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 4,
+      borderColor: t.ring,
+      backgroundColor: `${t.ring}14`,
+      shadowColor: t.ring,
+      shadowOpacity: 0.9,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 0 },
+    },
+    neonRingCompact: { width: 88, height: 88, borderRadius: 44, borderWidth: 3 },
+    neonIcon: { textShadowColor: t.secondGlow, textShadowRadius: 14, textShadowOffset: { width: 0, height: 0 } },
+    featuredTag: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 12,
+      height: 26,
+      justifyContent: 'center',
+      borderRadius: radius.pill,
+      backgroundColor: t.accentGlow,
+    },
+    featuredTagText: { color: colors.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+    featuredName: { color: colors.white, fontWeight: '800', fontSize: 32, lineHeight: 38, ...KEEP_WORDS },
+    featuredNameCompact: { fontSize: 23, lineHeight: 28 },
+    featuredDesc: { color: t.featuredDesc, fontStyle: 'italic', fontSize: 15, lineHeight: 21 },
+    featuredActions: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginTop: 6 },
+    featuredPrice: {
+      color: colors.white,
+      fontWeight: '800',
+      fontSize: 24,
+      paddingHorizontal: 18,
+      paddingVertical: 4,
+      borderRadius: radius.pill,
+      borderWidth: 2.5,
+      borderColor: t.secondGlow,
+      textShadowColor: t.secondGlow,
+      textShadowRadius: 8,
+      textShadowOffset: { width: 0, height: 0 },
+    },
+    featuredAdd: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 38,
+      paddingHorizontal: 14,
+      borderRadius: radius.pill,
+      borderWidth: 1.5,
+      borderColor: 'rgba(255,255,255,0.5)',
+    },
+    featuredAddText: { color: colors.white, fontWeight: '700', fontSize: 14 },
+    // Web: let the browser keep vertical scrolling, and hand sideways drags to the swipe.
+    swipeable: Platform.OS === 'web' ? ({ touchAction: 'pan-y', userSelect: 'none' } as object) : {},
+    dots: { position: 'absolute', right: 22, bottom: 14, flexDirection: 'row', gap: 8 },
+    dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.45)' },
+    dotOn: { backgroundColor: t.accentGlow, width: 22 },
 
-  infoCards: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  infoCard: { flexGrow: 1, flexBasis: 190, gap: 6, padding: 18, borderRadius: radius.xl, backgroundColor: colors.white, ...softShadow },
-  infoIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-  infoTitle: { fontSize: 19, fontWeight: '800', color: colors.navy },
-  infoText: { fontSize: 15, lineHeight: 21, color: colors.text },
-  infoSmall: { fontSize: 12, lineHeight: 17, color: colors.textMuted },
-  avgRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    paddingVertical: 5,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  avgLabel: { fontSize: 14, color: colors.text },
-  avgValue: { fontSize: 15, fontWeight: '800', color: colors.navy },
-  signRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  signText: { fontSize: 14, color: colors.text, flexShrink: 1 },
+    infoCards: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+    infoCard: {
+      flexGrow: 1,
+      flexBasis: 190,
+      gap: 6,
+      padding: 18,
+      paddingBottom: t.key === 'korean' ? 34 : 18,
+      borderRadius: radius.xl,
+      backgroundColor: colors.white,
+      overflow: 'hidden',
+      ...softShadow,
+    },
+    infoIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+    infoTitle: { fontSize: 19, fontWeight: '800', color: colors.navy },
+    infoText: { fontSize: 15, lineHeight: 21, color: colors.text },
+    infoSmall: { fontSize: 12, lineHeight: 17, color: colors.textMuted },
+    avgRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 8,
+      paddingVertical: 5,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    avgLabel: { fontSize: 14, color: colors.text },
+    avgValue: { fontSize: 15, fontWeight: '800', color: colors.navy },
+    signRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    signText: { fontSize: 14, color: colors.text, flexShrink: 1 },
 
-  // Menu body
-  body: { gap: 24 },
-  bodyWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
-  menuCol: { gap: 34 },
-  sideCol: { width: 340, position: 'sticky' } as object,
-  section: { gap: 14 },
-  sectionHead: { flexDirection: 'row', gap: 14 },
-  sectionBar: { width: 5, borderRadius: 3, backgroundColor: CYAN },
-  sectionTitle: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: colors.navy, letterSpacing: -0.5 },
-  sectionNote: { fontSize: 15, fontStyle: 'italic', color: colors.textMuted },
-  sharedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  shared: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    height: 28,
-    borderRadius: radius.pill,
-    backgroundColor: colors.keaneyTint,
-  },
-  sharedLabel: { fontSize: 13, color: colors.navy },
-  sharedPrice: { fontSize: 13, fontWeight: '800', color: colors.navy },
-  items: { gap: 10 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    padding: 14,
-    borderRadius: radius.lg,
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    ...shadow.card,
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-  },
-  itemCompact: { gap: 12, padding: 12 },
-  itemOn: { borderColor: `${PINK}55` },
-  thumb: {
-    width: 72,
-    height: 72,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.keaneyTint,
-    alignSelf: 'flex-start',
-  },
-  thumbCompact: { width: 48, height: 48 },
-  thumbStar: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: PINK,
-    borderWidth: 2,
-    borderColor: colors.white,
-  },
-  itemNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  itemName: { fontSize: 18, fontWeight: '800', color: colors.navy, flexShrink: 1, ...KEEP_WORDS },
-  newTag: { paddingHorizontal: 8, height: 20, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: PINK },
-  newTagText: { color: colors.white, fontSize: 11, fontWeight: '900' },
-  itemDesc: { fontSize: 14, lineHeight: 20, fontStyle: 'italic', color: colors.textMuted },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  option: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-  },
-  optionHover: { borderColor: PINK },
-  optionOn: { borderColor: PINK, backgroundColor: `${PINK}12` },
-  optionCount: { color: PINK, fontWeight: '900', fontSize: 13 },
-  optionLabel: { fontSize: 13, color: colors.text },
-  optionPrice: { fontSize: 14, fontWeight: '800', color: colors.navy },
-  itemRight: { alignItems: 'flex-end', gap: 8, minWidth: 104 },
-  itemRightCompact: { minWidth: 0, alignSelf: 'flex-start' },
-  itemPrice: { fontSize: 19, fontWeight: '800', color: colors.navy },
-  from: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
-  add: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 38, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 2, borderColor: PINK },
-  addCompact: { height: 34, paddingHorizontal: 12 },
-  addHover: { backgroundColor: `${PINK}10` },
-  addOn: { backgroundColor: PINK },
-  addText: { color: PINK, fontWeight: '800', fontSize: 15 },
-  footnote: { flexDirection: 'row', gap: 10, padding: 14, borderRadius: radius.lg, backgroundColor: colors.keaneyTint },
-  footnoteText: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.text },
-  allergy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 16,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
-    borderColor: `${PINK}40`,
-    backgroundColor: colors.white,
-  },
-  allergyText: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.navy },
-  empty: { fontSize: 16, color: colors.textMuted, textAlign: 'center', paddingVertical: 30 },
-  credit: { fontSize: 12, color: colors.textMuted },
+    // Menu body
+    body: { gap: 24 },
+    bodyWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
+    menuCol: { gap: 34 },
+    sideCol: { width: 340, position: 'sticky' } as object,
+    section: { gap: 14 },
+    sectionHead: { flexDirection: 'row', gap: 14 },
+    sectionBar: { width: 5, borderRadius: 3, backgroundColor: t.second },
+    sectionTitle: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: colors.navy, letterSpacing: -0.5 },
+    sectionNote: { fontSize: 15, fontStyle: 'italic', color: colors.textMuted },
+    sharedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+    shared: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      height: 28,
+      borderRadius: radius.pill,
+      backgroundColor: colors.keaneyTint,
+    },
+    sharedLabel: { fontSize: 13, color: colors.navy },
+    sharedPrice: { fontSize: 13, fontWeight: '800', color: colors.navy },
+    items: { gap: 10 },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      padding: 14,
+      borderRadius: radius.lg,
+      backgroundColor: colors.white,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      ...shadow.card,
+      shadowOpacity: 0.06,
+      shadowRadius: 10,
+    },
+    itemCompact: { gap: 12, padding: 12 },
+    itemOn: { borderColor: `${t.accent}55` },
+    thumb: {
+      width: 72,
+      height: 72,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.thumbBg,
+      alignSelf: 'flex-start',
+    },
+    thumbCompact: { width: 48, height: 48 },
+    thumbStar: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.accent,
+      borderWidth: 2,
+      borderColor: colors.white,
+    },
+    itemNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+    itemName: { fontSize: 18, fontWeight: '800', color: colors.navy, flexShrink: 1, ...KEEP_WORDS },
+    newTag: { paddingHorizontal: 8, height: 20, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: t.accent },
+    newTagText: { color: colors.white, fontSize: 11, fontWeight: '900' },
+    itemDesc: { fontSize: 14, lineHeight: 20, fontStyle: 'italic', color: colors.textMuted },
+    options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+    option: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      height: 34,
+      paddingHorizontal: 12,
+      borderRadius: radius.pill,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      backgroundColor: colors.white,
+    },
+    optionHover: { borderColor: t.accent },
+    optionOn: { borderColor: t.accent, backgroundColor: `${t.accent}12` },
+    optionCount: { color: t.accent, fontWeight: '900', fontSize: 13 },
+    optionLabel: { fontSize: 13, color: colors.text },
+    optionPrice: { fontSize: 14, fontWeight: '800', color: colors.navy },
+    itemRight: { alignItems: 'flex-end', gap: 8, minWidth: 104 },
+    itemRightCompact: { minWidth: 0, alignSelf: 'flex-start' },
+    itemPrice: { fontSize: 19, fontWeight: '800', color: colors.navy },
+    from: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
+    add: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      height: 38,
+      paddingHorizontal: 16,
+      borderRadius: radius.pill,
+      borderWidth: 2,
+      borderColor: t.accent,
+    },
+    addCompact: { height: 34, paddingHorizontal: 12 },
+    addHover: { backgroundColor: `${t.accent}10` },
+    addOn: { backgroundColor: t.accent },
+    addText: { color: t.accent, fontWeight: '800', fontSize: 15 },
+    footnote: { flexDirection: 'row', gap: 10, padding: 14, borderRadius: radius.lg, backgroundColor: colors.keaneyTint },
+    footnoteText: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.text },
+    allergy: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 16,
+      borderRadius: radius.lg,
+      borderWidth: 1.5,
+      borderColor: `${t.accent}40`,
+      backgroundColor: colors.white,
+    },
+    allergyText: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.navy },
+    empty: { fontSize: 16, color: colors.textMuted, textAlign: 'center', paddingVertical: 30 },
+    credit: { fontSize: 12, color: colors.textMuted },
 
-  // Order
-  orderCard: { gap: 12, padding: 18, borderRadius: radius.xl, backgroundColor: colors.white, ...shadow.card, shadowOpacity: 0.1 },
-  orderHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  orderEmpty: {
-    fontSize: 14,
-    color: colors.textMuted,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    textAlign: 'center',
-    borderRadius: radius.md,
-    backgroundColor: colors.background,
-  },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  lineName: { fontSize: 14, fontWeight: '700', color: colors.navy, ...KEEP_WORDS },
-  lineOption: { fontSize: 12, color: colors.textMuted },
-  lineTotal: { fontSize: 14, fontWeight: '800', color: colors.navy, minWidth: 58, textAlign: 'right' },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  step: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.keaneyTint },
-  qty: { fontWeight: '800', color: colors.navy, minWidth: 18, textAlign: 'center' },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  totalLabel: { fontSize: 15, fontWeight: '700', color: colors.navy },
-  totalValue: { fontSize: 26, fontWeight: '900', color: colors.navy },
-  orderButtons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  callButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 46,
-    borderRadius: radius.pill,
-    backgroundColor: colors.navy,
-  },
-  callText: { color: colors.white, fontWeight: '800', fontSize: 15 },
-  clear: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6 },
-  clearText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
+    // Order
+    orderCard: {
+      gap: 12,
+      padding: 18,
+      paddingBottom: t.key === 'korean' ? 34 : 18,
+      borderRadius: radius.xl,
+      backgroundColor: colors.white,
+      overflow: 'hidden',
+      ...shadow.card,
+      shadowOpacity: 0.1,
+    },
+    orderHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    orderEmpty: {
+      fontSize: 14,
+      color: colors.textMuted,
+      paddingVertical: 14,
+      paddingHorizontal: 10,
+      textAlign: 'center',
+      borderRadius: radius.md,
+      backgroundColor: colors.background,
+    },
+    line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    lineName: { fontSize: 14, fontWeight: '700', color: colors.navy, ...KEEP_WORDS },
+    lineOption: { fontSize: 12, color: colors.textMuted },
+    lineTotal: { fontSize: 14, fontWeight: '800', color: colors.navy, minWidth: 58, textAlign: 'right' },
+    stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    step: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.keaneyTint },
+    qty: { fontWeight: '800', color: colors.navy, minWidth: 18, textAlign: 'center' },
+    totalRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    totalLabel: { fontSize: 15, fontWeight: '700', color: colors.navy },
+    totalValue: { fontSize: 26, fontWeight: '900', color: colors.navy },
+    orderButtons: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    callButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      height: 46,
+      borderRadius: radius.pill,
+      backgroundColor: colors.navy,
+    },
+    callText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+    clear: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6 },
+    clearText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
 
-  trayWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', padding: 12 },
-  tray: { width: '100%', maxWidth: 560, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.navy, ...shadow.card, shadowOpacity: 0.3 },
-  trayBody: { padding: 8, paddingBottom: 0 },
-  trayBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 3,
-    borderTopColor: PINK_GLOW,
-  },
-  badge: {
-    minWidth: 28,
-    height: 28,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: PINK_GLOW,
-  },
-  badgeText: { color: colors.white, fontWeight: '900' },
-  trayTitle: { color: colors.white, fontWeight: '800', fontSize: 15 },
-  traySub: { color: '#B9CCE4', fontSize: 12 },
-  trayTotal: { color: colors.white, fontWeight: '900', fontSize: 22 },
-});
+    trayWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', padding: 12 },
+    tray: {
+      width: '100%',
+      maxWidth: 560,
+      borderRadius: radius.xl,
+      overflow: 'hidden',
+      backgroundColor: colors.navy,
+      ...shadow.card,
+      shadowOpacity: 0.3,
+    },
+    trayBody: { padding: 8, paddingBottom: 0 },
+    trayBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderTopWidth: 3,
+      borderTopColor: t.accentGlow,
+    },
+    badge: {
+      minWidth: 28,
+      height: 28,
+      paddingHorizontal: 6,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.accentGlow,
+    },
+    badgeText: { color: colors.white, fontWeight: '900' },
+    trayTitle: { color: colors.white, fontWeight: '800', fontSize: 15 },
+    traySub: { color: '#B9CCE4', fontSize: 12 },
+    trayTotal: { color: colors.white, fontWeight: '900', fontSize: 22 },
+  });

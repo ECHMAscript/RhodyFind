@@ -54,4 +54,6 @@ export type Menu = {
   source: string;
   sections: MenuSection[];
   footnote?: string;
+  /** The page's look (components/menu/theme.tsx); Albie's neon-board style when absent. */
+  theme?: 'korean';
 };
