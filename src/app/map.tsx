@@ -37,10 +37,20 @@ import { breakpoints, colors, radius, shadow } from '@/theme';
 // How far the phone layout's panel overlaps the bottom of the map (its marginTop).
 const PANEL_OVERLAP = 20;
 const OFF_ROUTE_METERS = 30;
-// The arrow follows the route toward a point this far ahead...
+// On foot people are slow, so a 30 m limit took ~20 s to notice a wrong turn.
+// Walking and skating use a tighter limit (still widened for fuzzy GPS)...
+const OFF_ROUTE_METERS_ON_FOOT = 12;
+const MAX_GPS_SLACK_ON_FOOT = 25;
+// ...and also count as off the route when this far from it and heading away
+// from it: more than DRIFT_DEG off the route's direction.
+const DRIFT_METERS = 8;
+const DRIFT_DEG = 45;
+// The route's direction is taken toward a point this far ahead on it.
 const ROUTE_HEADING_LOOKAHEAD_M = 8;
-// ...unless the GPS direction disagrees by more than this (walking the wrong way).
-const WRONG_WAY_DEG = 75;
+// The arrow lies along the route (steadier than GPS) while the direction of
+// travel is within this of it; otherwise it shows where the user is really
+// going, diagonals included.
+const FOLLOW_ROUTE_DEG = 25;
 // Arrived when this close along the route...
 const ARRIVED_METERS = 20;
 // ...or this close to the destination itself, in a straight line.
@@ -55,9 +65,22 @@ const REROUTE_COOLDOWN_MS = 3000;
 // Farther than this from the route, the user is clearly not on campus yet.
 const FAR_AWAY_METERS = 1500;
 
-/** The direction of travel, when the user is moving fast enough for it to be reliable. */
-function movingHeading(fix: LiveFix): number | undefined {
-  return (fix.speed ?? 0) > 1.5 ? fix.heading : undefined;
+/**
+ * The direction of travel, when the user is moving fast enough for it to be
+ * reliable. Walking is about 1.3 m/s, so on foot the bar is lower (the
+ * heading is already fitted over several seconds of fixes, lib/heading.ts).
+ */
+function movingHeading(fix: LiveFix, mode: TravelMode): number | undefined {
+  const minSpeed = mode === 'walk' || mode === 'skate' ? 0.6 : 1.5;
+  return (fix.speed ?? 0) > minSpeed ? fix.heading : undefined;
+}
+
+/** Direction of a route at a point on it: toward the spot ROUTE_HEADING_LOOKAHEAD_M further along. */
+function routeBearingAt(coords: LatLng[], point: LatLng, segment: number): number | undefined {
+  let j = Math.min(segment + 1, coords.length - 1);
+  while (j < coords.length - 1 && haversineMeters(point, coords[j]) < ROUTE_HEADING_LOOKAHEAD_M) j++;
+  if (haversineMeters(point, coords[j]) < 1) return undefined; // at the very end
+  return bearingDeg(point, coords[j]);
 }
 
 export default function MapScreen() {
@@ -153,9 +176,23 @@ export default function MapScreen() {
     return anywhere.meters < near.meters ? anywhere : near;
   }, [user, activeRoute, cum, progressSegment, fix?.speed]);
   // Don't call a fix "off route" just because the GPS itself is fuzzy.
-  const offRouteLimit = Math.max(OFF_ROUTE_METERS, Math.min(fix?.accuracy ?? 0, 60));
+  const onFoot = mode === 'walk' || mode === 'skate';
+  const offRouteLimit = onFoot
+    ? Math.max(OFF_ROUTE_METERS_ON_FOOT, Math.min(fix?.accuracy ?? 0, MAX_GPS_SLACK_ON_FOOT))
+    : Math.max(OFF_ROUTE_METERS, Math.min(fix?.accuracy ?? 0, 60));
   const farAway = !!track && track.meters >= FAR_AWAY_METERS;
-  const onRoute = !!track && track.meters <= offRouteLimit;
+  // The route's direction where the user is on it, and whether they're
+  // walking away from it (cutting across a lawn, a wrong turn).
+  const routeBearing = track && activeRoute ? routeBearingAt(activeRoute.coords, track.point, track.segment) : undefined;
+  const travelHeading = fix ? movingHeading(fix, mode) : undefined;
+  const drifting =
+    onFoot &&
+    !!track &&
+    track.meters > DRIFT_METERS &&
+    travelHeading !== undefined &&
+    routeBearing !== undefined &&
+    Math.abs(angleDelta(routeBearing, travelHeading)) > DRIFT_DEG;
+  const onRoute = !!track && track.meters <= offRouteLimit && !drifting;
 
   // Meters left along the route from the user's spot on it (to the end, and to the end of a step).
   const metersFromUserTo = useCallback(
@@ -209,7 +246,7 @@ export default function MapScreen() {
         const n = offFixes + 1;
         const r =
           n >= REROUTE_AFTER_FIXES && fix.time - lastRerouteAt >= REROUTE_COOLDOWN_MS
-            ? findRoute(fix.position, to, mode, { heading: movingHeading(fix) })
+            ? findRoute(fix.position, to, mode, { heading: movingHeading(fix, mode) })
             : null;
         if (r) {
           setRerouted({ base: route, route: r }); // only the current mode: a few ms
@@ -224,7 +261,7 @@ export default function MapScreen() {
 
   const rerouteNow = () => {
     if (!user || !to || !route) return;
-    const r = findRoute(user, to, mode, { heading: fix && movingHeading(fix) });
+    const r = findRoute(user, to, mode, { heading: fix && movingHeading(fix, mode) });
     if (r) {
       setRerouted({ base: route, route: r });
       setLastRerouteAt(fix?.time ?? Date.now());
@@ -239,26 +276,23 @@ export default function MapScreen() {
     if (!base) return;
     setNavRoute(base);
     setStepSel({ route: base, index: 0 });
-    const r = user && to ? findRoute(user, to, m, { heading: fix && movingHeading(fix) }) : null;
+    const r = user && to ? findRoute(user, to, m, { heading: fix && movingHeading(fix, m) }) : null;
     setRerouted(r ? { base, route: r } : null);
   };
 
   const live = navigating && following && onRoute && !!track;
 
-  // While on the route, the arrow points along it: from the user's spot on
-  // the route toward a point ~8 m further on (so it turns as a corner nears).
-  // GPS direction alone wobbles; if it clearly disagrees (the user is walking
-  // the other way), show what they're really doing.
+  // The arrow shows the direction of travel. While that's close to the
+  // route's direction it lies along the route instead (from the user's spot on
+  // it toward a point ~8 m further on, so it turns as a corner nears), which
+  // is steadier than GPS. Any real difference (a diagonal, the wrong way)
+  // shows what the user is really doing; it used to snap to the route until
+  // they were 75 degrees off, so a diagonal walk showed as straight along a path.
   const shownFix = useMemo(() => {
-    if (!fix || !live || !track || !activeRoute) return fix;
-    const c = activeRoute.coords;
-    let j = Math.min(track.segment + 1, c.length - 1);
-    while (j < c.length - 1 && haversineMeters(track.point, c[j]) < ROUTE_HEADING_LOOKAHEAD_M) j++;
-    if (haversineMeters(track.point, c[j]) < 1) return fix; // at the very end
-    const along = bearingDeg(track.point, c[j]);
-    if (fix.heading !== undefined && Math.abs(angleDelta(fix.heading, along)) > WRONG_WAY_DEG) return fix;
-    return { ...fix, heading: along };
-  }, [fix, live, track, activeRoute]);
+    if (!fix || !live || routeBearing === undefined) return fix;
+    if (fix.heading !== undefined && Math.abs(angleDelta(fix.heading, routeBearing)) > FOLLOW_ROUTE_DEG) return fix;
+    return { ...fix, heading: routeBearing };
+  }, [fix, live, routeBearing]);
   // While tracking, draw only the route from the user's current segment on.
   // Cutting at a vertex (not at the 1-per-second GPS point) keeps the line
   // still under the smoothly gliding dot instead of jumping each second, and

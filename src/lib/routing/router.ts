@@ -105,12 +105,24 @@ function reachable(g: Graph, mode: TravelMode): Uint8Array {
   return seen;
 }
 
-// When the user is moving, a node behind them costs this many extra meters,
-// so a reroute continues forward instead of starting with a U-turn.
-const BEHIND_PENALTY_M = 35;
-
-// Snapping candidates fetched from the k-d tree when a heading is given.
-const SNAP_CANDIDATES = 24;
+// Rerouting a moving user. The route may start at any network node near
+// them, not just the closest one; each costs its distance plus a penalty for
+// how far it is off their direction of travel (half of TURN_PENALTY_M for a
+// node straight to the side, all of it for one straight behind). So someone
+// walking straight gets a route that carries on ahead, not one that starts on
+// a path to their right because it happens to be a few meters closer.
+const TURN_PENALTY_M = 120;
+// Nodes this close are underfoot: reaching one costs no penalty, but the
+// route's first edge from it is then its first move, so that edge is
+// penalized for its angle the same way instead.
+const UNDERFOOT_M = 5;
+// A route whose first edge doubles back (more than this off the heading)...
+const UTURN_DEG = 120;
+// ...costs this many extra meters.
+const UTURN_PENALTY_M = 80;
+// Start candidates: the nearest nodes, out to this far.
+const START_CANDIDATES = 48;
+const START_RADIUS_M = 120;
 
 // Per travel mode: a k-d tree over the network nodes that mode can use.
 const nodeIndexes = new Map<TravelMode, { index: SpatialIndex; nodes: Int32Array }>();
@@ -133,77 +145,85 @@ function nodeIndex(g: Graph, mode: TravelMode) {
   return entry;
 }
 
-/**
- * Snapping cost of a node: its distance, plus a penalty if it's behind a
- * moving user (more than 90 degrees off their heading, and not right underfoot),
- * so a reroute continues forward instead of starting with a U-turn.
- */
-function snapCost(dx: number, dy: number, heading?: number): number {
-  const d = Math.hypot(dx, dy);
-  if (heading === undefined) return d;
-  const hx = Math.sin((heading * Math.PI) / 180);
-  const hy = Math.cos((heading * Math.PI) / 180);
-  return d + (d > 8 && dx * hx + dy * hy < 0 ? BEHIND_PENALTY_M : 0);
-}
-
-/**
- * Closest network node a mode can use, found with the C++ k-d tree when it's
- * loaded. With a heading, the cheapest of the nearest candidates wins; if a
- * node beyond the candidates could still be cheaper, it falls back to the scan,
- * so the answer is always exact.
- */
-function snap(g: Graph, mode: TravelMode, p: LatLng, heading?: number): number {
+/** The k nearest network nodes a mode can use, nearest first: the C++ k-d tree when it's loaded, else a scan. */
+function nearestNodes(g: Graph, mode: TravelMode, p: LatLng, k: number): { node: number; meters: number }[] {
+  const [px, py] = toXY(p);
   const entry = nodeIndex(g, mode);
   if (entry) {
-    const [px, py] = toXY(p);
-    const near = entry.index.kNearestXY(px, py, heading === undefined ? 1 : SNAP_CANDIDATES);
-    let best = -1;
-    let bestCost = Infinity;
-    for (const { id } of near) {
-      const n = entry.nodes[id];
-      const [x, y] = toXY({ lat: g.lat[n], lng: g.lng[n] });
-      const cost = snapCost(x - px, y - py, heading);
-      if (cost < bestCost) {
-        bestCost = cost;
-        best = n;
-      }
-    }
-    // Any node not returned is at least as far as the last candidate, and costs at least its distance.
-    const farthest = near.length ? Math.sqrt(near[near.length - 1].dist2) : Infinity;
-    if (best >= 0 && (near.length < SNAP_CANDIDATES || heading === undefined || bestCost <= farthest)) return best;
+    return entry.index.kNearestXY(px, py, k).map(({ id, dist2 }) => ({ node: entry.nodes[id], meters: Math.sqrt(dist2) }));
   }
-  return snapBruteForce(g, mode, p, heading);
-}
-
-/** The baseline: check every node. */
-function snapBruteForce(g: Graph, mode: TravelMode, p: LatLng, heading?: number): number {
   const ok = reachable(g, mode);
-  const [px, py] = toXY(p);
-  let best = -1;
-  let bestCost = Infinity;
+  const all: { node: number; meters: number }[] = [];
   for (let n = 0; n < g.nodeCount; n++) {
     if (!ok[n]) continue;
     const [x, y] = toXY({ lat: g.lat[n], lng: g.lng[n] });
-    const cost = snapCost(x - px, y - py, heading);
-    if (cost < bestCost) {
-      bestCost = cost;
-      best = n;
-    }
+    all.push({ node: n, meters: Math.hypot(x - px, y - py) });
   }
-  return best;
+  return all.sort((a, b) => a.meters - b.meters).slice(0, k);
+}
+
+/** Closest network node a mode can use. */
+function snap(g: Graph, mode: TravelMode, p: LatLng): number {
+  return nearestNodes(g, mode, p, 1)[0]?.node ?? -1;
+}
+
+/** Unit vector (east, north) of a compass heading. */
+const headingVector = (deg: number): [number, number] => [Math.sin((deg * Math.PI) / 180), Math.cos((deg * Math.PI) / 180)];
+
+/**
+ * Where a moving user's route may start, with the extra meters each costs for
+ * being off their direction of travel (see TURN_PENALTY_M).
+ */
+function startCandidates(g: Graph, mode: TravelMode, p: LatLng, heading: number): { node: number; meters: number; extra: number }[] {
+  const [hx, hy] = headingVector(heading);
+  const [px, py] = toXY(p);
+  const near = nearestNodes(g, mode, p, START_CANDIDATES);
+  return near
+    .filter((c, i) => i === 0 || c.meters <= START_RADIUS_M)
+    .map(({ node, meters }) => {
+      if (meters <= UNDERFOOT_M) return { node, meters, extra: 0 };
+      const [x, y] = toXY({ lat: g.lat[node], lng: g.lng[node] });
+      const cos = ((x - px) * hx + (y - py) * hy) / meters;
+      return { node, meters, extra: (TURN_PENALTY_M * (1 - cos)) / 2 };
+    });
+}
+
+/**
+ * Extra meters for a route's first edge, from start node a to b: scaled by its
+ * angle off the heading when a is underfoot (that edge is where the route
+ * starts), else only if it doubles back on the heading (a U-turn at a node ahead).
+ */
+function firstEdgePenalty(g: Graph, a: number, b: number, heading: [number, number], underfoot: boolean): number {
+  const [ax, ay] = toXY({ lat: g.lat[a], lng: g.lng[a] });
+  const [bx, by] = toXY({ lat: g.lat[b], lng: g.lng[b] });
+  const len = Math.hypot(bx - ax, by - ay);
+  if (len < 1) return 0;
+  const cos = ((bx - ax) * heading[0] + (by - ay) * heading[1]) / len;
+  if (underfoot) return (TURN_PENALTY_M * (1 - cos)) / 2;
+  return cos < Math.cos((UTURN_DEG * Math.PI) / 180) ? UTURN_PENALTY_M : 0;
 }
 
 /**
  * Shortest (by travel time) route between two points for a travel mode, using
  * A*. Pass the user's heading when rerouting while moving, so the route starts
- * in the direction they're already going.
+ * in the direction they're already going: then the search starts from every
+ * node near them at once (multi-source A*), each at the cost of walking to it
+ * plus a penalty for being off their heading, and a first edge that doubles
+ * back costs extra too.
  */
 export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { heading?: number } = {}): Route | null {
   const g = campusGraph();
   const profile = PROFILES[mode];
-  const start = snap(g, mode, from, opts.heading);
   const goal = snap(g, mode, to);
-  if (start < 0 || goal < 0) return null;
+  if (goal < 0) return null;
+  const connectorSpeed = PROFILES.walk.speed('footway');
+  const starts =
+    opts.heading === undefined
+      ? [{ node: snap(g, mode, from), meters: 0, extra: 0 }]
+      : startCandidates(g, mode, from, opts.heading);
+  if (!starts.length || starts[0].node < 0) return null;
+  const heading = opts.heading === undefined ? undefined : headingVector(opts.heading);
+  const underfoot = new Set(starts.filter((c) => c.meters <= UNDERFOOT_M).map((c) => c.node));
 
   // Admissible heuristic: straight-line distance at the mode's top speed.
   let topSpeed = 0;
@@ -215,8 +235,14 @@ export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { he
   const prevAdj = new Int32Array(g.nodeCount).fill(-1); // adjacency slot used to reach each node
   const done = new Uint8Array(g.nodeCount);
   const open = new MinHeap();
-  cost[start] = 0;
-  open.push(start, h(start));
+  for (const c of starts) {
+    // Seconds to walk to the node, counting the off-heading penalty.
+    const c0 = (c.meters + c.extra) / connectorSpeed;
+    if (c0 < cost[c.node]) {
+      cost[c.node] = c0;
+      open.push(c.node, c0 + h(c.node));
+    }
+  }
 
   while (open.size) {
     const n = open.pop();
@@ -228,7 +254,9 @@ export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { he
       const kind = g.edgeKind[e];
       if (!profile.allows(g.edgeFlags[e], kind, g.adjDir[k])) continue;
       const t = g.adjTarget[k];
-      const c = cost[n] + (g.edgeLength[e] / profile.speed(kind)) * profile.penalty(kind);
+      let c = cost[n] + (g.edgeLength[e] / profile.speed(kind)) * profile.penalty(kind);
+      // The route's first edge, out of the node it starts at.
+      if (heading && prevAdj[n] < 0) c += firstEdgePenalty(g, n, t, heading, underfoot.has(n)) / connectorSpeed;
       if (c < cost[t]) {
         cost[t] = c;
         prevAdj[t] = k;
@@ -236,12 +264,13 @@ export function findRoute(from: LatLng, to: LatLng, mode: TravelMode, opts: { he
       }
     }
   }
-  if (start !== goal && prevAdj[goal] < 0) return null;
+  if (cost[goal] === Infinity) return null;
 
   // Walk back from the goal to recover the path.
   const edges: { edge: number; dir: number }[] = [];
   const nodePath = [goal];
-  for (let n = goal; n !== start; ) {
+  // Back to the start node the search came from (the one with no predecessor).
+  for (let n = goal; prevAdj[n] >= 0; ) {
     const k = prevAdj[n];
     edges.push({ edge: g.adjEdge[k], dir: g.adjDir[k] });
     n = g.adjDir[k] > 0 ? g.edgeA[g.adjEdge[k]] : g.edgeB[g.adjEdge[k]];
