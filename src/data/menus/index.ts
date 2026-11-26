@@ -1,4 +1,6 @@
 import { ALBIES_MENU } from './albies';
+import { HIGH_1_MENU } from './high1';
+import { KINGSTON_PIZZA_MENU } from './kingstonPizza';
 import { TASTE_OF_KOREA_MENU } from './tasteOfKorea';
 import type { Menu, MenuItem, MenuKind, MenuOption, MenuSection } from './types';
 
@@ -8,6 +10,8 @@ export type { Menu, MenuItem, MenuKind, MenuOption, MenuSection } from './types'
 export const MENUS: Record<string, Menu> = {
   [ALBIES_MENU.placeId]: ALBIES_MENU,
   [TASTE_OF_KOREA_MENU.placeId]: TASTE_OF_KOREA_MENU,
+  [HIGH_1_MENU.placeId]: HIGH_1_MENU,
+  [KINGSTON_PIZZA_MENU.placeId]: KINGSTON_PIZZA_MENU,
 };
 
 export const menuFor = (placeId: string): Menu | undefined => MENUS[placeId];

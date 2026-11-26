@@ -168,6 +168,7 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
       { ...IN_PERSON_VISIT, label: 'Visited by the RhodyFind team (Nov 2026): photos, menu board, hours and phone' },
       { label: 'DoorDash: High 1', url: 'https://page-service.doordash.com/en-GB/store/high-1-24693498' },
       { label: 'High 1 website', url: 'https://www.high1uri.com' },
+      { label: 'DoorDash: High 1, full menu and prices (read Nov 25, 2026)', url: 'https://www.doordash.com/store/high-1-south-kingstown-24693498/' },
     ],
   },
   'masjid-al-huda': {
@@ -715,10 +716,24 @@ export const PLACE_DETAILS: Record<string, PlaceDetails> = {
     sources: [{ label: 'Wanderlog: Bru Coffee Bar', url: 'https://wanderlog.com/place/details/10645478/bru-coffee-bar' }, OSM],
   },
   'kingston-pizza': {
-    about: 'Kingston Pizza is a long-running pizzeria near campus, in business since 1984, serving pizza, grinders, calzones, salads and Italian dinners.',
+    about:
+      'Kingston Pizza is a long-running pizzeria near campus, in business since 1984, serving pizza, grinders, calzones, ' +
+      'salads and Italian dinners. Its specialty pizzas have names like the Testarossa, the Z-28 and the Rolls Royce.',
     address: '63 Briar Lane, Kingston, RI 02881',
-    highlights: ['Listed hours: 11 a.m.–midnight (call ahead to check)'],
-    sources: [{ label: 'Yext: Kingston Pizza', url: 'https://directory.yext.com/en/kingston-pizza-505925043' }, OSM],
+    hours: 'Every day 11 a.m.–11 p.m. (Yelp, Nov 2026). Older listings say open until midnight, so call ahead.',
+    phone: '(401) 415-0228',
+    website: 'https://www.doordash.com/store/kingston-pizza-kingston-33922777/',
+    highlights: [
+      'About 30 specialty pizzas, plus specialty calzones, grinders, wings and dinners',
+      'Order online through DoorDash for pickup or delivery',
+      'Directories list other phone numbers too (401-515-4448, 401-783-9130); Yelp\u2019s is the most recent',
+    ],
+    sources: [
+      { label: 'Yext: Kingston Pizza', url: 'https://directory.yext.com/en/kingston-pizza-505925043' },
+      { label: 'Yelp: Kingston Pizza, hours and phone (Nov 2026)', url: 'https://www.yelp.com/biz/kingston-pizza-kingston' },
+      { label: 'DoorDash: Kingston Pizza, full menu and prices (read Nov 25, 2026)', url: 'https://www.doordash.com/store/kingston-pizza-kingston-33922777/' },
+      OSM,
+    ],
   },
 
   // ------------------------------------------------------------------- Stores

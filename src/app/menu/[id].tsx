@@ -19,14 +19,16 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Header } from '@/components/Header';
 import {
-  CardSprig,
-  CardWaves,
+  Backdrop,
+  CardBand,
+  CardCorner,
+  Divider,
   FeaturedDecor,
-  KoreanBackdrop,
-  KoreanHeroDecor,
+  HeroDecor,
   MENU_THEMES,
-  TaegeukDivider,
-  TitleFlick,
+  TitleFlourish,
+  themeKicker,
+  useThemeFonts,
   type MenuTheme,
 } from '@/components/menu/theme';
 import type { IconName } from '@/data/locations';
@@ -62,7 +64,7 @@ export default function MenuScreen() {
   const menu = id ? menuFor(id) : undefined;
   const t = MENU_THEMES[menu?.theme ?? 'board'];
   const styles = stylesFor(t);
-  const korean = t.key === 'korean';
+  useThemeFonts(t);
   const details = id ? PLACE_DETAILS[id] : undefined;
   const hours = splitHours(details?.hours);
   const { width } = useWindowDimensions();
@@ -198,7 +200,7 @@ export default function MenuScreen() {
       <View style={styles.screen}>
         <Header />
         <View ref={frame} style={{ flex: 1 }}>
-          {korean && <KoreanBackdrop compact={compact} width={width} />}
+          <Backdrop t={t} compact={compact} width={width} />
           <ScrollView
             ref={scroll}
             contentContainerStyle={[styles.scroll, !wide && count > 0 && { paddingBottom: 110 }]}
@@ -269,7 +271,7 @@ export default function MenuScreen() {
                     <FeaturedCard items={featured} onAdd={add} compact={compact} style={wide ? { flex: 1.5 } : undefined} />
                   )}
                   <View style={[styles.infoCards, wide && { flex: 2 }]}>
-                    <InfoCard icon="clock-outline" color={korean ? t.accent : t.second} title="Hours">
+                    <InfoCard icon="clock-outline" color={t.hoursIcon} title="Hours">
                       <Text style={styles.infoText}>{hours.main}</Text>
                       {!!hours.note && <Text style={styles.infoSmall}>{hours.note}</Text>}
                     </InfoCard>
@@ -284,7 +286,7 @@ export default function MenuScreen() {
                         ))}
                     </InfoCard>
                     {!!menu.signLines?.length && (
-                      <InfoCard icon="star" color={t.accent} title="On the sign" decor={korean && <CardSprig />}>
+                      <InfoCard icon="star" color={t.accent} title="On the sign" decor={<CardCorner t={t} />}>
                         {menu.signLines.map((l) => (
                           <View key={l} style={styles.signRow}>
                             <MaterialCommunityIcons name="check" size={16} color={t.accent} />
@@ -332,7 +334,7 @@ export default function MenuScreen() {
                   )}
                   <Text style={styles.credit}>
                     {menu.source}. Prices may have changed; totals are estimates before tax.
-                    {korean ? ' Illustrations: RhodyFind.' : ` Banner photo: The Quad (${PHOTOS.quad.credit}).`}
+                    {t.artCredit ? ` ${t.artCredit}` : ` Banner photo: The Quad (${PHOTOS.quad.credit}).`}
                   </Text>
                 </View>
 
@@ -400,8 +402,8 @@ function Hero({
   const openMap = () => router.push(`/map?to=${menu.placeId}`);
   return (
     <View style={styles.hero}>
-      {t.key === 'korean' ? (
-        <KoreanHeroDecor compact={compact} width={width} />
+      {t.key !== 'board' ? (
+        <HeroDecor t={t} compact={compact} width={width} />
       ) : (
         <>
           <Image source={PHOTOS.quad.source} style={[imageFill, { opacity: 0.32 }]} resizeMode="cover" />
@@ -436,8 +438,8 @@ function Hero({
                 <View style={[styles.kickerLine, compact && { width: 30 }]} />
               </View>
             )}
-            {t.key === 'korean' && <TaegeukDivider />}
-            {menu.tagline && <Text style={[styles.tagline, compact && { fontSize: 16 }]}>{menu.tagline}</Text>}
+            <Divider t={t} />
+            {menu.tagline && <Text style={[styles.tagline, compact && { fontSize: Math.round((t.tagline?.fontSize ?? 20) * 0.8) }]}>{menu.tagline}</Text>}
           </View>
           {/* Keeps the title centered on the page when the photo sits to its left. */}
           {wide && photo && <View style={styles.heroBalance} />}
@@ -470,7 +472,7 @@ function InfoPill({ icon, text, onPress }: { icon: IconName; text: string; onPre
   const { t, styles } = useMenuTheme();
   return (
     <Pressable onPress={onPress} style={({ hovered }: any) => [styles.pill, hovered && styles.pillHover]} accessibilityRole="link">
-      <MaterialCommunityIcons name={icon} size={18} color={t.key === 'korean' ? t.second : colors.keaney} />
+      <MaterialCommunityIcons name={icon} size={18} color={t.pillIcon} />
       <Text style={styles.pillText} numberOfLines={1}>
         {text}
       </Text>
@@ -534,7 +536,7 @@ function FeaturedCard({ items, onAdd, compact, style }: { items: Featured[]; onA
       {...({ onMouseEnter: () => setPaused(true), onMouseLeave: () => setPaused(false) } as object)}
     >
       <LinearGradient colors={t.featured} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-      {t.key === 'korean' && <FeaturedDecor compact={compact} />}
+      <FeaturedDecor t={t} compact={compact} />
       <Animated.View
         style={[styles.featuredInner, compact && styles.featuredInnerCompact, { opacity: fade, transform: [{ translateX: dragX }] }]}
       >
@@ -606,7 +608,7 @@ function InfoCard({
   const { t, styles } = useMenuTheme();
   return (
     <View style={styles.infoCard}>
-      {t.key === 'korean' && <CardWaves />}
+      <CardBand t={t} />
       {decor}
       <View style={[styles.infoIcon, { backgroundColor: `${color}1A` }]}>
         <MaterialCommunityIcons name={icon} size={22} color={color} />
@@ -625,7 +627,7 @@ function SectionHead({ section }: { section: MenuSection }) {
       <View style={{ flex: 1, gap: 4 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
           <Text style={styles.sectionTitle}>{section.title}</Text>
-          {t.key === 'korean' && <TitleFlick />}
+          <TitleFlourish t={t} />
         </View>
         {section.notes?.map((n) => (
           <Text key={n} style={styles.sectionNote}>
@@ -753,7 +755,7 @@ function OrderPanel({
   const { t, styles } = useMenuTheme();
   return (
     <View style={styles.orderCard}>
-      {t.key === 'korean' && <CardWaves />}
+      <CardBand t={t} />
       <View style={styles.orderHead}>
         <View style={[styles.infoIcon, { backgroundColor: `${t.accent}1A` }]}>
           <MaterialCommunityIcons name="receipt-text-outline" size={22} color={t.accent} />
@@ -848,18 +850,16 @@ const makeStyles = (t: MenuTheme) =>
     heroTitle: {
       fontSize: 72,
       lineHeight: 80,
-      fontWeight: '900',
-      fontStyle: 'italic',
-      color: colors.navy,
-      letterSpacing: -1.5,
+      color: t.ink,
       textAlign: 'center',
+      ...t.title,
     },
     heroTitleCompact: { fontSize: 44, lineHeight: 50 },
     kickerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     kickerLine: { width: 56, height: 3, borderRadius: 2, backgroundColor: t.accentGlow },
-    kicker: { fontSize: 16, fontWeight: '700', letterSpacing: 7, color: colors.navy },
+    kicker: { fontSize: 16, fontWeight: '700', letterSpacing: 7, color: t.ink, ...themeKicker(t) },
     kickerCompact: { fontSize: 13, letterSpacing: 3 },
-    tagline: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: colors.navy, textAlign: 'center' },
+    tagline: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 20, color: t.ink, textAlign: 'center', ...t.tagline },
     pills: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, marginTop: 4 },
     pill: {
       flexDirection: 'row',
@@ -991,14 +991,14 @@ const makeStyles = (t: MenuTheme) =>
       flexBasis: 190,
       gap: 6,
       padding: 18,
-      paddingBottom: t.key === 'korean' ? 34 : 18,
+      paddingBottom: t.cardBand ? 34 : 18,
       borderRadius: radius.xl,
       backgroundColor: colors.white,
       overflow: 'hidden',
       ...softShadow,
     },
     infoIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-    infoTitle: { fontSize: 19, fontWeight: '800', color: colors.navy },
+    infoTitle: { fontSize: 19, fontWeight: '800', color: t.ink },
     infoText: { fontSize: 15, lineHeight: 21, color: colors.text },
     infoSmall: { fontSize: 12, lineHeight: 17, color: colors.textMuted },
     avgRow: {
@@ -1022,7 +1022,7 @@ const makeStyles = (t: MenuTheme) =>
     section: { gap: 14 },
     sectionHead: { flexDirection: 'row', gap: 14 },
     sectionBar: { width: 5, borderRadius: 3, backgroundColor: t.second },
-    sectionTitle: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: colors.navy, letterSpacing: -0.5 },
+    sectionTitle: { fontSize: 30, lineHeight: 36, fontWeight: '800', color: t.ink, letterSpacing: -0.5 },
     sectionNote: { fontSize: 15, fontStyle: 'italic', color: colors.textMuted },
     sharedRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
     shared: {
@@ -1076,7 +1076,7 @@ const makeStyles = (t: MenuTheme) =>
       borderColor: colors.white,
     },
     itemNameRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-    itemName: { fontSize: 18, fontWeight: '800', color: colors.navy, flexShrink: 1, ...KEEP_WORDS },
+    itemName: { fontSize: 18, fontWeight: '800', color: t.ink, flexShrink: 1, ...KEEP_WORDS },
     newTag: { paddingHorizontal: 8, height: 20, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: t.accent },
     newTagText: { color: colors.white, fontSize: 11, fontWeight: '900' },
     itemDesc: { fontSize: 14, lineHeight: 20, fontStyle: 'italic', color: colors.textMuted },
@@ -1135,7 +1135,7 @@ const makeStyles = (t: MenuTheme) =>
     orderCard: {
       gap: 12,
       padding: 18,
-      paddingBottom: t.key === 'korean' ? 34 : 18,
+      paddingBottom: t.cardBand ? 34 : 18,
       borderRadius: radius.xl,
       backgroundColor: colors.white,
       overflow: 'hidden',

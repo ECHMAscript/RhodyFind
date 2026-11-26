@@ -3,10 +3,7 @@
 // tower on a hill, cheonghaepa (wave) tiles, cloud scrolls, a lattice corner,
 // a taegeuk circle and brush strokes. All original drawings, as SVG strings.
 
-const svg = (viewBox: string, body: string, w?: number, h?: number) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}"${w ? ` width="${w}" height="${h}"` : ''}>${body}</svg>`;
-
-export const svgUri = (s: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+import { svg } from './artKit';
 
 /** A five-petal blossom centered at (x, y). */
 function blossom(x: number, y: number, r: number, rot = 0, fill = '#F6B7C8') {
