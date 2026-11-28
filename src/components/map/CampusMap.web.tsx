@@ -11,6 +11,7 @@ import { angleDelta } from '@/lib/heading';
 import { predictPosition, smoothToward } from '@/lib/motion';
 import type { Compass } from '@/lib/useCompass';
 import type { LiveFix } from '@/lib/useWatchPosition';
+import { RouteReveal } from './RouteReveal.web';
 import type { CampusMapProps } from './types';
 
 // Leaflet markers are plain HTML, so the icons are drawn with the same
@@ -479,6 +480,7 @@ const USER_ICON = L.divIcon({
 });
 const ROUTE_STYLE: L.PathOptions = { color: '#1F5FD1', weight: 6, opacity: 0.85, lineCap: 'round', lineJoin: 'round' };
 const ROUTE_DIM_STYLE: L.PathOptions = { ...ROUTE_STYLE, opacity: 0.35 };
+const ROUTE_HIDDEN_STYLE: L.PathOptions = { ...ROUTE_STYLE, opacity: 0 };
 const HIGHLIGHT_STYLE: L.PathOptions = { color: colors.navy, weight: 8, opacity: 1, lineCap: 'round', lineJoin: 'round' };
 
 export const CampusMap = memo(function CampusMap({
@@ -496,7 +498,10 @@ export const CampusMap = memo(function CampusMap({
   trimRouteToUser = false,
   showParking = false,
   compass,
+  revealMode,
 }: CampusMapProps) {
+  // While a new route draws itself in, the reveal draws its own copy of the line.
+  const [revealing, setRevealing] = useState(false);
   const [frameListeners] = useState(() => new Set<FrameListener>());
   const trimTo = trimRouteToUser && userFix ? frameListeners : undefined;
   const fromPos = useMemo<L.LatLngTuple | undefined>(() => from && [from.lat, from.lng], [from?.lat, from?.lng]);
@@ -549,7 +554,16 @@ export const CampusMap = memo(function CampusMap({
         />
       ))}
 
-      {path && <RouteLine positions={path} pathOptions={highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE} trimTo={trimTo} />}
+      {path && (
+        <RouteLine
+          positions={path}
+          pathOptions={revealing ? ROUTE_HIDDEN_STYLE : highlightPath ? ROUTE_DIM_STYLE : ROUTE_STYLE}
+          trimTo={trimTo}
+        />
+      )}
+      {path && revealMode && !trimTo && !highlightPath && (
+        <RouteReveal positions={path} mode={revealMode} style={ROUTE_STYLE} destination={toPos} onActiveChange={setRevealing} />
+      )}
       {highlightPath && <RouteLine positions={highlightPath} pathOptions={HIGHLIGHT_STYLE} trimTo={trimTo} />}
       {fromPos && <Marker position={fromPos} icon={FROM_PIN} zIndexOffset={1000} />}
       {toPos && <Marker position={toPos} icon={TO_PIN} zIndexOffset={1000} />}

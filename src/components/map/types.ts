@@ -1,6 +1,6 @@
 import type { CampusLocation } from '@/data/locations';
 import type { Endpoint } from '@/lib/endpoints';
-import type { LatLng } from '@/lib/geo';
+import type { LatLng, TravelMode } from '@/lib/geo';
 import type { Compass } from '@/lib/useCompass';
 import type { LiveFix } from '@/lib/useWatchPosition';
 
@@ -32,6 +32,11 @@ export type CampusMapProps = {
    * on phones). The camera keeps the user and fitted routes above it.
    */
   bottomInset?: number;
+  /**
+   * Planning (not navigating): a new route draws itself in and a traveler for
+   * this mode races along it (web).
+   */
+  revealMode?: TravelMode;
   /** Outline and color every parking lot around campus, with the listed lots' names shown. */
   showParking?: boolean;
   /** Navigating on the route: cut the drawn route at the moving dot, every frame (web). */

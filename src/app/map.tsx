@@ -563,6 +563,7 @@ export default function MapScreen() {
       fitTo={mapFit}
       onUserPan={onUserPan}
       showParking={showParking}
+      revealMode={navigating ? undefined : mode}
       // Phone, sheet down: the sheet covers the bottom. Phone, planning: the
       // panel's rounded top overlaps the map by PANEL_OVERLAP.
       bottomInset={sheet ? peekHeight : mobile ? PANEL_OVERLAP : 0}

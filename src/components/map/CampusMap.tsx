@@ -27,6 +27,7 @@ export const CampusMap = memo(function CampusMap({
   bottomInset = 0,
   showParking = false,
   compass,
+  revealMode: _revealMode,
 }: CampusMapProps) {
   const user = userFix?.position;
   // While walking or standing, the arrow follows the compass (where the phone
