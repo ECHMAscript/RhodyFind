@@ -1,6 +1,7 @@
 import type { CampusLocation } from '@/data/locations';
 import type { Endpoint } from '@/lib/endpoints';
 import type { LatLng } from '@/lib/geo';
+import type { Compass } from '@/lib/useCompass';
 import type { LiveFix } from '@/lib/useWatchPosition';
 
 export type CampusMapProps = {
@@ -14,6 +15,12 @@ export type CampusMapProps = {
   highlight?: LatLng[];
   /** The user's live GPS fix. The map glides the dot between fixes and shows heading. */
   userFix?: LiveFix;
+  /**
+   * The phone's compass. While walking (or standing), the arrow points where
+   * the phone points, turning the instant it turns; faster than that it
+   * follows the GPS direction of travel.
+   */
+  compass?: Compass;
   /** Keep the camera on the user (live navigation); fitTo is ignored while true. */
   follow?: boolean;
   /** Called when the user drags the map, so the screen can pause following. */

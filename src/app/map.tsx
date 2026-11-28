@@ -29,6 +29,7 @@ import { buildSteps } from '@/lib/routing/directions';
 import { findRoute, type Route } from '@/lib/routing/router';
 import { findNearest } from '@/lib/search';
 import { angleDelta } from '@/lib/heading';
+import { requestCompassPermission, useCompass } from '@/lib/useCompass';
 import { offCampusDistance } from '@/lib/campus';
 import { useCurrentLocation } from '@/lib/useCurrentLocation';
 import { useWatchPosition, type LiveFix } from '@/lib/useWatchPosition';
@@ -136,6 +137,8 @@ export default function MapScreen() {
   // True after the user drags the map; the camera stops chasing them until "Recenter".
   const [cameraFree, setCameraFree] = useState(false);
   const { fix, error: watchError } = useWatchPosition(navigating && following);
+  // The compass turns the arrow the instant the phone turns (lib/useCompass.ts).
+  const compass = useCompass(navigating && following);
   const user = fix?.position;
 
   // A route recomputed from the user's live position after they left the
@@ -344,6 +347,8 @@ export default function MapScreen() {
   const peekHeight = sheetPeekHeight(peekShown);
 
   const startRoute = () => {
+    // iPhones only share the compass after a tap asks for it.
+    requestCompassPermission();
     setSheetUp(false);
     setStepSel({ route, index: 0 });
     setProgress({ route: null, segment: 0 }); // restarting the same route starts from the beginning
@@ -514,6 +519,7 @@ export default function MapScreen() {
         onEnd={endRoute}
         following={following}
         onToggleFollow={() => {
+          requestCompassPermission();
           setFollowing((f) => !f);
           setCameraFree(false);
         }}
@@ -551,6 +557,7 @@ export default function MapScreen() {
       route={routeShown}
       highlight={highlight}
       userFix={farAway ? undefined : shownFix}
+      compass={farAway ? undefined : compass}
       trimRouteToUser={live}
       follow={follow}
       fitTo={mapFit}

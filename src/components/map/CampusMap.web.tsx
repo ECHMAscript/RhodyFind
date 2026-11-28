@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Polygon, TileLayer, Tooltip, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -9,6 +9,7 @@ import { colors } from '@/theme';
 import { haversineMeters, type LatLng } from '@/lib/geo';
 import { angleDelta } from '@/lib/heading';
 import { predictPosition, smoothToward } from '@/lib/motion';
+import type { Compass } from '@/lib/useCompass';
 import type { LiveFix } from '@/lib/useWatchPosition';
 import type { CampusMapProps } from './types';
 
@@ -184,6 +185,12 @@ function FitBounds({ points, bottomInset }: { points: L.LatLngTuple[]; bottomIns
 }
 
 const FOLLOW_ZOOM = 18;
+// Faster than this (m/s, a brisk run) the arrow follows the GPS direction of
+// travel instead of the compass: on a bike or in a car the phone often isn't
+// pointing the way you're going.
+const COMPASS_MAX_SPEED = 3;
+// A compass that has gone quiet this long (ms) no longer steers the arrow.
+const COMPASS_STALE_MS = 1500;
 const NO_POINTS: L.LatLngTuple[] = [];
 
 /**
@@ -200,11 +207,13 @@ function LiveUser({
   onUserPan,
   bottomInset,
   frameListeners,
+  compass,
 }: {
   fix: LiveFix;
   follow: boolean;
   onUserPan?: () => void;
   bottomInset: number;
+  compass?: Compass;
   /** Called with the dot's position on every frame it moves (route lines trim to it). */
   frameListeners: Set<FrameListener>;
 }) {
@@ -226,20 +235,39 @@ function LiveUser({
   }, [bottomInset]);
 
   // Rotate the heading arrow in place instead of building a new icon. The
-  // angle keeps counting past 360 so the CSS transition always turns the short
-  // way: 350 -> 10 degrees is a 20-degree turn, not a 340-degree spin that
-  // points backwards on the way.
+  // angle keeps counting past 360 so it always turns the short way: 350 -> 10
+  // degrees is a 20-degree turn, not a 340-degree spin that points backwards.
+  //
+  // Two sources: the compass (where the phone points, ~60 readings a second,
+  // drawn straight away like Google Maps) while walking or standing, and the
+  // GPS direction of travel (once a second, eased over 0.3 s) when moving
+  // faster than COMPASS_MAX_SPEED or when there's no compass (a laptop).
   const arrowAngle = useRef<number | undefined>(undefined);
-  useEffect(() => {
+  const turnArrow = useCallback((deg: number | undefined, fromCompass: boolean) => {
     const arrow = markerRef.current?.getElement()?.querySelector<HTMLElement>('.rf-heading');
     if (!arrow) return;
-    arrow.style.display = fix.heading === undefined ? 'none' : 'block';
-    if (fix.heading === undefined) return;
+    arrow.style.display = deg === undefined ? 'none' : 'block';
+    if (deg === undefined) return;
     const prev = arrowAngle.current;
-    const next = prev === undefined ? fix.heading : prev + angleDelta(prev, fix.heading);
+    const next = prev === undefined ? deg : prev + angleDelta(prev, deg);
     arrowAngle.current = next;
+    arrow.style.transition = fromCompass ? 'none' : 'transform .3s linear';
     arrow.style.transform = `rotate(${next}deg)`;
-  }, [fix.heading]);
+  }, []);
+  const compassInCharge = useCallback(() => {
+    const c = compass?.latest();
+    return !!c && Date.now() - c.at < COMPASS_STALE_MS && (fixRef.current.speed ?? 0) < COMPASS_MAX_SPEED;
+  }, [compass]);
+  useEffect(() => {
+    if (compassInCharge()) return;
+    turnArrow(fix.heading, false);
+  }, [fix.heading, fix.speed, compassInCharge, turnArrow]);
+  useEffect(() => {
+    if (!compass) return;
+    return compass.subscribe((deg) => {
+      if ((fixRef.current.speed ?? 0) < COMPASS_MAX_SPEED) turnArrow(deg, true);
+    });
+  }, [compass, turnArrow]);
 
   useEffect(() => {
     let raf = 0;
@@ -467,6 +495,7 @@ export const CampusMap = memo(function CampusMap({
   bottomInset = 0,
   trimRouteToUser = false,
   showParking = false,
+  compass,
 }: CampusMapProps) {
   const [frameListeners] = useState(() => new Set<FrameListener>());
   const trimTo = trimRouteToUser && userFix ? frameListeners : undefined;
@@ -531,6 +560,7 @@ export const CampusMap = memo(function CampusMap({
           onUserPan={onUserPan}
           bottomInset={bottomInset}
           frameListeners={frameListeners}
+          compass={compass}
         />
       )}
     </MapContainer>

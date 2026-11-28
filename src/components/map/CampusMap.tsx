@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polygon, Polyline } from 'react-native-maps';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -26,9 +26,15 @@ export const CampusMap = memo(function CampusMap({
   onUserPan,
   bottomInset = 0,
   showParking = false,
+  compass,
 }: CampusMapProps) {
   const user = userFix?.position;
-  const heading = userFix?.heading;
+  // While walking or standing, the arrow follows the compass (where the phone
+  // points); faster than a run, the GPS direction of travel.
+  const [compassDeg, setCompassDeg] = useState<number>();
+  useEffect(() => (compass ? compass.subscribe((d) => setCompassDeg(Math.round(d))) : undefined), [compass]);
+  const walking = (userFix?.speed ?? 0) < 3;
+  const heading = walking && compass && compassDeg !== undefined ? compassDeg : userFix?.heading;
   const followUser = follow ? user : undefined;
   const ref = useRef<MapView>(null);
   const following = useRef(false);
